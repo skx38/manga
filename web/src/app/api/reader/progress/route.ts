@@ -85,21 +85,41 @@ export async function POST(request: Request) {
             today.setHours(0, 0, 0, 0);
 
             await prisma.userReadingStat.upsert({
-                where: {
-                    userId_date: {
-                        userId,
-                        date: today
-                    }
-                },
-                update: {
-                    chaptersRead: { increment: 1 }
-                },
-                create: {
-                    userId,
-                    date: today,
-                    chaptersRead: 1
-                }
+                where: { userId_date: { userId, date: today } },
+                update: { chaptersRead: { increment: 1 } },
+                create: { userId, date: today, chaptersRead: 1 },
             });
+
+            // Streak update: fetch current streak state
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { streakDays: true, lastReadDate: true },
+            });
+
+            if (user) {
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+
+                const lastDate = user.lastReadDate ? new Date(user.lastReadDate) : null;
+                if (lastDate) lastDate.setHours(0, 0, 0, 0);
+
+                let newStreak = user.streakDays;
+                if (!lastDate || lastDate < yesterday) {
+                    // Streak broken or first read — reset to 1
+                    newStreak = 1;
+                } else if (lastDate.getTime() === yesterday.getTime()) {
+                    // Read yesterday — extend streak
+                    newStreak = user.streakDays + 1;
+                }
+                // lastDate === today: already counted today, no change
+
+                if (!lastDate || lastDate.getTime() !== today.getTime()) {
+                    await prisma.user.update({
+                        where: { id: userId },
+                        data: { streakDays: newStreak, lastReadDate: today },
+                    });
+                }
+            }
         }
 
         return NextResponse.json(progress);

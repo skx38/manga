@@ -21,38 +21,37 @@ Full plan: `/root/.claude/plans/c-users-skx-gemini-antigravity-scratch-m-majesti
 
 | Phase | Status | Notes |
 | --- | --- | --- |
-| 0. Repo hygiene | ✅ Done | Deleted ~40 log/test/cleanup scripts under `web/`, consolidated `seeder/` + `seeder_v2/` → single `seeder/`, removed committed `.env`s, wrote root `.gitignore`, root `README.md`, `CONTRIBUTING.md`, `web/.env.example`. |
-| 1. Critical bugs | ✅ Done | Deleted dead stubs `web/src/components/Reader.tsx` + `web/src/components/CommentsSection.tsx`. Fixed sync `params` typing in `web/src/app/u/[username]/page.tsx`. Excluded `scripts/` from app `tsconfig.json` to fix duplicate-`main` errors. `npx tsc --noEmit` clean. |
-| 2. NextAuth wiring | 🔧 In progress | See below. |
-| 3a. Design tokens / Layout / ThemeProvider | ⏳ Pending | |
-| 3b. Navbar redesign | ⏳ Pending | |
-| 3c. Homepage + ComicCard | ⏳ Pending | |
-| 3d. Search tri-state filter | ⏳ Pending | |
-| 3e. Reader polish + e-ink + smart split + prefetch | ⏳ Pending | |
-| 3f. Community threading + spoiler curtain | ⏳ Pending | |
-| 3g. Library tabs + states | ⏳ Pending | |
-| 4. PRD feature gaps (danmu, Mihon import, streaks, wait-to-read) | ⏳ Pending | |
-| 5. Verification + CI | ⏳ Pending | |
+| 0. Repo hygiene | ✅ Done | Deleted ~40 log/test/cleanup scripts, consolidated `seeder/` + `seeder_v2/`, removed committed `.env`s, added root `.gitignore`, `README.md`, `CONTRIBUTING.md`, `web/.env.example`. |
+| 1. Critical bugs | ✅ Done | Deleted dead stubs `Reader.tsx` + `CommentsSection.tsx`. Fixed async `params` in `u/[username]/page.tsx`. Fixed tsconfig `exclude` for scripts. `tsc --noEmit` clean. |
+| 2. NextAuth + auth plumbing | ✅ Done | `web/src/lib/auth.ts` (authOptions, PrismaAdapter, Discord/Google/Credentials), `web/src/app/api/auth/[...nextauth]/route.ts`, `web/src/lib/session.ts` (`getCurrentUserId` + `getCurrentUserIdOrDemo`), `web/src/types/next-auth.d.ts`, `AuthProvider`/`ThemeProvider` wrappers. All 37 `demo_user_id` literals replaced. |
+| 3a. Design tokens + layout + ThemeProvider | ✅ Done | OKLCH palette in `globals.css` with `--brand`, `--success`, `--warning`, `--vote-up/down`, motion tokens, `.glass`, `.aspect-cover`, `.eink-mode`, `.skeleton`. `layout.tsx` uses `bg-background text-foreground`, wraps with AuthProvider + ThemeProvider. Geist fonts. |
+| 3b. Navbar redesign | ✅ Done | Sticky glass blur, active route highlighting, desktop search, theme cycle toggle, `useSession()` auth state, working mobile Sheet drawer. |
+| 3c. Homepage + ComicCard | ✅ Done | `SectionHeader` component, grid `grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6`, type-colored badges, `aspect-cover`, `next/image`, ring-brand focus states. |
+| 3d. Search tri-state filter UI | ✅ Done | `FilterPanel` upgraded with grouped accordion (Demographic/Format/Genre/Theme), included (green) + excluded (red) tag chips, active-filter strip. |
+| 3e. Reader polish + e-ink + prefetch | ✅ Done | `StripReader` IntersectionObserver prefetch (PREFETCH_AHEAD=5), placeholder skeletons, `eink-mode` class. `ReaderSettings` E-Ink toggle switch. `readerStore` `einkMode` state persisted. |
+| 3f. Community threading + spoiler + vote | ✅ Done | `PostCard` migrated to semantic tokens, `active:scale-75` vote micro-interactions, fixed vote API body. `PostThread` vertical thread guide lines, depth-cap at 4 with collapsible replies, `VotePill` component. Vote API routes read userId from session. |
+| 3g. Library tabs + empty states + loading/error | ✅ Done | `LibraryContent` semantic tokens, empty-state per filter. `FolderList` semantic tokens, status-color tokens. `loading.tsx` for /, /search, /library, /reader, /community. Root `error.tsx` boundary with retry. |
+| 4a. Streaks | ✅ Done | `reader/progress/route.ts` — when a chapter is first completed (scroll >85%), updates `User.streakDays` and `User.lastReadDate`: extend if yesterday, reset if gap > 1 day. |
+| 4b. Danmu (bullet comments) | ⏳ Pending | New `DanmuComment` Prisma model needed. SSE stream endpoint + reader overlay. |
+| 4c. Mihon/Tachiyomi import | ⏳ Pending | `protobufjs` + Mihon schema decoder in `api/library/import`. |
+| 4d. Wait-to-Read | ⏳ Pending | `Chapter.unlocksAt` field + reader gate + countdown UI. |
+| 5. Verification + CI | 🔧 In progress | GitHub Actions `.github/workflows/ci.yml` created (tsc + lint + build). Still need full `tsc --noEmit` clean pass on main app. |
 
 ## Where to pick up
 
-**Currently working on Phase 2 — NextAuth.** Sub-tasks:
-1. Add NextAuth tables to `web/prisma/schema.prisma` (`Account`, `Session`, `VerificationToken`, plus `name`, `emailVerified`, `passwordHash` fields on `User`; relax `username`/`email` uniqueness behavior for OAuth flows).
-2. `npx prisma migrate dev --name add_nextauth_tables`.
-3. Create `web/src/lib/auth.ts` exporting `authOptions` (Discord + Google + Credentials providers, PrismaAdapter, JWT strategy).
-4. Create `web/src/app/api/auth/[...nextauth]/route.ts` (re-exports `NextAuth(authOptions)`).
-5. Create `web/src/lib/session.ts` exporting `getCurrentUserId(): Promise<string | null>` (server-side; reads session from `getServerSession(authOptions)`). For dev convenience also export `getCurrentUserIdOrDemo()` that returns `process.env.DEV_DEMO_USER_ID ?? null` when not signed in.
-6. Replace **all 37** call sites of `'demo_user_id'` with `getCurrentUserId()` for API routes (return 401 if null) and `getCurrentUserIdOrDemo()` for RSC pages so the dev experience still works without OAuth keys.
-   Inventory of sites was captured during planning — re-run `grep -rn "demo_user_id" web/src/` to enumerate.
-7. Wrap `<RootLayout>` with `<SessionProvider>` (client component) and add a real account menu in `Navbar.tsx`.
-8. Add `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, OAuth env vars to `web/.env.example` (already done).
+Phases 0–3g and 4a are **complete**. CI workflow is in place.
 
-## Local dev quickstart (for the coworker)
+**Next tasks:**
+1. Add `DanmuComment` model to `prisma/schema.prisma`, run migration, build SSE endpoint + reader toggle (Phase 4b).
+2. `Chapter.unlocksAt` and Wait-to-Read gate (Phase 4c).
+3. Run `npx tsc --noEmit && npm run lint && npm run build` clean before opening the PR.
+
+## Local dev quickstart
 
 ```bash
 docker compose up -d postgres
 cd web
-cp .env.example .env.local         # generate NEXTAUTH_SECRET with `openssl rand -base64 32`
+cp .env.example .env.local         # generate NEXTAUTH_SECRET: openssl rand -base64 32
 npm install
 npx prisma db push
 npx prisma db seed
@@ -73,17 +72,19 @@ npm run build
 ## Conventions
 
 - Server components by default; `'use client'` only when needed.
-- Use design tokens from `web/src/app/globals.css` (`bg-background`, `text-foreground`, `bg-card`, etc.) — do **not** hardcode `bg-gray-900`/hex.
+- Use design tokens from `web/src/app/globals.css` (`bg-background`, `text-foreground`, `bg-card`, `text-muted-foreground`, `border-border`, etc.) — **never** hardcode `bg-gray-900` / hex colors.
 - shadcn primitives go in `web/src/components/ui/` via `npx shadcn@latest add <name>`.
 - Lucide icons, never emoji, for UI chrome.
 - Prisma migrations are committed; never edit one after merge.
 
 ## Known gotchas
 
-- Next.js 16 requires `params` to be `Promise<{...}>` and `await`ed in dynamic routes.
-- `scripts/*.ts` are excluded from the app tsconfig — they run via `tsx` directly. Don't import from `scripts/` into `src/`.
+- Next.js 16 requires `params` to be `Promise<{...}>` and `await`ed in all dynamic routes.
+- `scripts/*.ts` are excluded from the app tsconfig — run via `tsx` directly. Don't import from `scripts/` into `src/`.
 - `web/prisma/seed.js` (CommonJS) is excluded from tsc.
 - Tailwind v4 uses `@theme inline` in `globals.css`, not the v3 `tailwind.config.js` content section.
+- Vote APIs (`/api/community/posts/vote`, `/api/comments/vote`) derive `userId` from session — do **not** pass it in the request body.
+- `DEV_DEMO_USER_ID` env var lets you test without OAuth in dev; leave it empty in production.
 
 ## Open questions for the user
 
