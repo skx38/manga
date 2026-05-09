@@ -24,7 +24,6 @@ interface CommentSectionProps {
 }
 
 const EMOJI_LIST = ['😀', '😂', '😍', '🔥', '😭', '😱', '👍', '👎', '❤️', '🤔'];
-const CURRENT_USER_ID = 'demo_user_id'; // Mock ID
 
 export default function CommentSection({ chapterId, isBlurred, onUnblur }: CommentSectionProps) {
     const [comments, setComments] = useState<Comment[]>([]);
@@ -61,7 +60,6 @@ export default function CommentSection({ chapterId, isBlurred, onUnblur }: Comme
                 body: JSON.stringify({
                     content: newComment,
                     chapterId,
-                    userId: CURRENT_USER_ID,
                     isSpoiler: false // Deprecated checkbox
                 }),
             });
@@ -138,7 +136,6 @@ export default function CommentSection({ chapterId, isBlurred, onUnblur }: Comme
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     commentId,
-                    userId: CURRENT_USER_ID,
                     value: 1
                 }),
             });
@@ -160,7 +157,6 @@ export default function CommentSection({ chapterId, isBlurred, onUnblur }: Comme
                 body: JSON.stringify({
                     content,
                     chapterId,
-                    userId: CURRENT_USER_ID,
                     parentId,
                 }),
             });
@@ -295,7 +291,7 @@ function CommentItem({ comment, onReply, onVote, onDelete, onEdit }: {
     const [editContent, setEditContent] = useState(comment.content);
     const [showActions, setShowActions] = useState(false);
 
-    const isOwner = comment.user.id === CURRENT_USER_ID;
+    const isOwner = false; // TODO: compare with useSession().data?.user?.id
 
     const handleReplySubmit = (e: React.FormEvent) => {
         e.preventDefault();

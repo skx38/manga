@@ -1,4 +1,5 @@
 
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -7,7 +8,8 @@ const prisma = new PrismaClient();
 export async function POST(request: Request) {
     try {
         const { chapterId, pageNumber, scrollPercentage } = await request.json();
-        const userId = 'demo_user_id'; // Hardcoded for now
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         // Get chapter to know the comicId
         const chapter = await prisma.chapter.findUnique({

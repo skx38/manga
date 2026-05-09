@@ -3,6 +3,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Clock, BookOpen, ArrowRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 
 const prisma = new PrismaClient();
 
@@ -10,9 +11,8 @@ export const dynamic = 'force-dynamic';
 
 
 export default async function HistoryPage() {
-    const userId = 'demo_user_id';
-
-    const history = await prisma.readingProgress.findMany({
+    const userId = await getCurrentUserIdOrDemo();
+    const history = userId ? await prisma.readingProgress.findMany({
         where: { userId },
         include: {
             chapter: {
@@ -31,7 +31,7 @@ export default async function HistoryPage() {
         },
         orderBy: { lastRead: 'desc' },
         take: 50
-    });
+    }) : [];
 
     return (
         <div className="container mx-auto px-4 py-8">

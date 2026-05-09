@@ -8,14 +8,14 @@ import ComicInfo from '@/components/comic/ComicInfo';
 import ComicTabs from '@/components/comic/ComicTabs';
 import Recommendations from '@/components/comic/Recommendations';
 import { getSimilarComics } from '@/lib/recommendations';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 
 const prisma = new PrismaClient();
 
 // Force dynamic rendering to always fetch fresh data
 export const dynamic = 'force-dynamic';
 
-async function getData(slugOrId: string) {
-    const userId = 'demo_user_id'; // Hardcoded for now
+async function getData(slugOrId: string, userId: string | null) {
 
     // 1. Fetch Comic with all relations
     let comic = await (prisma.comic as any).findUnique({
@@ -47,27 +47,33 @@ async function getData(slugOrId: string) {
     if (!comic) return { comic: null, folders: [], continueChapter: null, similarComics: [] };
 
     // 2. Fetch User's Library Status
-    const libraryEntry = await (prisma as any).libraryEntry.findUnique({
-        where: { userId_comicId: { userId, comicId: comic.id } }
-    });
+    const libraryEntry = userId
+        ? await (prisma as any).libraryEntry.findUnique({
+              where: { userId_comicId: { userId, comicId: comic.id } },
+          })
+        : null;
 
     // 3. Fetch User's Folders (and check which ones contain this comic)
-    const folders = await (prisma as any).folder.findMany({
-        where: { userId },
-        include: { comics: true },
-        orderBy: { order: 'asc' }
-    });
+    const folders = userId
+        ? await (prisma as any).folder.findMany({
+              where: { userId },
+              include: { comics: true },
+              orderBy: { order: 'asc' },
+          })
+        : [];
 
     const comicFolderIds = folders
         .filter((f: any) => f.comics.some((fc: any) => fc.comicId === comic.id))
         .map((f: any) => f.id);
 
     // 4. Fetch Reading Progress (Last read chapter)
-    const progress = await prisma.readingProgress.findFirst({
-        where: { userId, chapter: { comicId: comic.id } },
-        orderBy: { lastRead: 'desc' },
-        include: { chapter: true }
-    });
+    const progress = userId
+        ? await prisma.readingProgress.findFirst({
+              where: { userId, chapter: { comicId: comic.id } },
+              orderBy: { lastRead: 'desc' },
+              include: { chapter: true },
+          })
+        : null;
 
     let continueChapter = progress?.chapter;
 
@@ -116,7 +122,8 @@ async function getData(slugOrId: string) {
 
 export default async function ComicDetailsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
-    const { comic, folders, continueChapter, similarComics } = await getData(id);
+    const userId = await getCurrentUserIdOrDemo();
+    const { comic, folders, continueChapter, similarComics } = await getData(id, userId);
 
     if (!comic) {
         return (

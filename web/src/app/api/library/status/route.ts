@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { PrismaClient } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 
@@ -7,7 +8,8 @@ const prisma = new PrismaClient();
 export async function POST(request: Request) {
     try {
         const { comicId, status, details } = await request.json();
-        const userId = 'demo_user_id'; // Hardcoded for now
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         console.log(`[API] Updating library status: userId=${userId}, comicId=${comicId}, status=${status}`);
 

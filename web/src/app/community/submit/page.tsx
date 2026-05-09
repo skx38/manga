@@ -41,7 +41,6 @@ function SubmitContent() {
                     content,
                     comicId,
                     flair,
-                    userId: 'demo_user_id' // Mock ID
                 }),
             });
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 
 const prisma = new PrismaClient();
 
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
             const postWithRelations = post as any;
             const upvotes = postWithRelations.votes.filter((v: any) => v.value === 1).length;
             const downvotes = postWithRelations.votes.filter((v: any) => v.value === -1).length;
-            const currentUserId = 'demo_user_id';
+            const currentUserId = await getCurrentUserIdOrDemo() ?? '';
             const userVote = postWithRelations.votes.find((v: any) => v.userId === currentUserId)?.value || 0;
 
             return NextResponse.json({
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
             });
         }
 
-        const currentUserId = 'demo_user_id'; // Hardcoded for now
+        const currentUserId = await getCurrentUserIdOrDemo() ?? '';
         const time = searchParams.get('time') || 'all'; // day, week, month, all
 
         // 1. Build Base Query
@@ -177,7 +178,7 @@ export async function POST(request: Request) {
         }
 
         // Ensure user exists (Mock User Fix)
-        if (userId === 'demo_user_id') {
+        if (!userId) {
             await prisma.user.upsert({
                 where: { id: userId },
                 update: {},

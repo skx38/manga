@@ -67,7 +67,6 @@ function CommentItem({ comment, postId, onReplySuccess }: { comment: Comment, po
             await fetch('/api/comments/vote', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ commentId: comment.id, userId: 'demo_user_id', value }),
             });
         } catch (error) {
             console.error(error);
@@ -88,7 +87,6 @@ function CommentItem({ comment, postId, onReplySuccess }: { comment: Comment, po
                 body: JSON.stringify({
                     content: replyContent,
                     postId,
-                    userId: 'demo_user_id',
                     parentId: comment.id
                 }),
             });
@@ -255,7 +253,6 @@ export default function PostThread({ postId }: { postId: string }) {
                 body: JSON.stringify({
                     content: newComment,
                     postId,
-                    userId: 'demo_user_id', // Mock ID
                 }),
             });
 
@@ -305,7 +302,6 @@ export default function PostThread({ postId }: { postId: string }) {
             await fetch('/api/community/posts/vote', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ postId, userId: 'demo_user_id', value }),
             });
         } catch (error) {
             console.error(error);

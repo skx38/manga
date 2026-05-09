@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 export async function GET() {
     try {
-        const userId = 'demo_user_id'; // Hardcoded for now
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         // 1. Get all comics the user is currently reading
         const readingEntries = await (prisma as any).libraryEntry.findMany({

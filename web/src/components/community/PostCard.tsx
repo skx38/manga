@@ -69,7 +69,6 @@ export default function PostCard({ post, onClick, compact = false, highlighted =
             await fetch('/api/community/posts/vote', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ postId: post.id, userId: 'demo_user_id', value }),
             });
         } catch (error) {
             console.error(error);

@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 export async function GET() {
     try {
-        const userId = 'demo_user_id';
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         // 1. Ensure User Exists (and fetch basic stats)
         const user = await prisma.user.upsert({

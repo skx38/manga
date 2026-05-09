@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { processImport, mapExternalStatus, ImportEntry } from '@/lib/import-utils';
 
 export async function POST(req: NextRequest) {
@@ -9,7 +10,8 @@ export async function POST(req: NextRequest) {
         const mode = formData.get('mode') as 'merge' | 'replace';
 
         // Mock User ID for now (Demo User)
-        const userId = 'demo_user_id';
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         if (!file) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 });

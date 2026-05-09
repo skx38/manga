@@ -93,7 +93,6 @@ export default function CreatePostModal({ isOpen, onClose, preselectedComic, onP
                     title,
                     content,
                     comicId: selectedComic.id,
-                    userId: 'demo_user_id', // Mock ID
                 }),
             });
 

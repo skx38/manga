@@ -8,6 +8,7 @@ import { startOfDay, subDays, differenceInDays, isSameDay } from 'date-fns';
 import { BookOpen } from 'lucide-react';
 import HeroCarousel from '@/components/dashboard/HeroCarousel';
 import { getPersonalizedRecommendations } from '@/lib/recommendations';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 
 const prisma = new PrismaClient();
 
@@ -46,8 +47,8 @@ async function getUpdates() {
   }));
 }
 
-async function getRecommendedComics() {
-  const userId = 'demo_user_id';
+async function getRecommendedComics(userId: string | null) {
+  if (!userId) return [];
   const comics = await getPersonalizedRecommendations(userId, 10);
 
   return comics.map((comic: any) => ({
@@ -60,9 +61,8 @@ async function getRecommendedComics() {
   }));
 }
 
-async function getReadingStats() {
-  const userId = 'demo_user_id';
-
+async function getReadingStats(userId: string | null) {
+  if (!userId) return { stats: null, heatmap: [] };
   try {
     const stats = await (prisma as any).userReadingStat.findMany({
       where: { userId },
@@ -138,17 +138,19 @@ async function getReadingStats() {
 }
 
 export default async function Home() {
+  const userId = await getCurrentUserIdOrDemo();
   const trendingComics = await getTrendingComics();
   const updates = await getUpdates();
-  const recommendedComics = await getRecommendedComics();
-  const { stats, heatmap } = await getReadingStats();
+  const recommendedComics = await getRecommendedComics(userId);
+  const { stats, heatmap } = await getReadingStats(userId);
 
   // Fetch library status for current user
-  const userId = 'demo_user_id';
-  const libraryEntries = await (prisma as any).libraryEntry.findMany({
-    where: { userId },
-    include: { comic: true }
-  });
+  const libraryEntries = userId
+    ? await (prisma as any).libraryEntry.findMany({
+        where: { userId },
+        include: { comic: true },
+      })
+    : [];
 
   // Create a map of slug -> status
   const libraryMap = new Map();
