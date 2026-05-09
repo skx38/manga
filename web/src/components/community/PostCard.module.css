@@ -1,0 +1,169 @@
+@reference "../../app/globals.css";
+
+/* PostCard Component - BEM Styling */
+
+.post-card {
+    @apply bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-700 transition-colors flex;
+}
+
+.post-card--highlighted {
+    @apply border-blue-500 border-2;
+}
+
+.post-card--compact {
+    @apply flex-row items-center p-2;
+}
+
+/* Vote Column */
+.post-card__vote-column {
+    @apply bg-gray-900/50 flex flex-col items-center p-2 gap-1 w-12 border-r border-gray-800;
+}
+
+.post-card--compact .post-card__vote-column {
+    @apply flex-row mr-4 w-auto border-r-0;
+}
+
+.post-card__vote-button {
+    @apply p-1 rounded hover:bg-gray-800 transition-colors text-gray-500 min-w-[3rem] min-h-[3rem];
+}
+
+.post-card__vote-button--up.post-card__vote-button--active {
+    color: #22c55e;
+}
+
+.post-card__vote-button--down.post-card__vote-button--active {
+    color: #ef4444;
+}
+
+.post-card__vote-button--up:hover {
+    color: #22c55e;
+}
+
+.post-card__vote-button--down:hover {
+    color: #ef4444;
+}
+
+.post-card__score {
+    @apply text-sm font-bold text-white;
+}
+
+.post-card__score--positive {
+    color: #22c55e;
+}
+
+.post-card__score--negative {
+    color: #ef4444;
+}
+
+/* Content Area */
+.post-card__content {
+    @apply flex-1 p-3 relative;
+}
+
+.post-card--compact .post-card__content {
+    @apply p-0;
+}
+
+/* Header */
+.post-card__header {
+    @apply flex items-center gap-2 text-xs text-gray-400 mb-1 flex-wrap;
+}
+
+.post-card__comic-link {
+    @apply font-bold text-white hover:underline flex items-center gap-1;
+}
+
+.post-card__comic-avatar {
+    @apply w-4 h-4 rounded-full overflow-hidden relative flex-shrink-0;
+}
+
+.post-card__comic-image {
+    @apply object-cover;
+}
+
+.post-card__comic-name {
+    @apply truncate;
+}
+
+.post-card__separator {
+    @apply text-gray-600;
+}
+
+.post-card__author-link {
+    @apply hover:underline;
+}
+
+.post-card__author-name {
+    @apply truncate;
+}
+
+.post-card__timestamp {
+    @apply truncate;
+}
+
+.post-card__context-badge {
+    @apply bg-blue-600/20 text-blue-400 px-2 py-0.5 rounded-full text-xs font-bold ml-auto;
+}
+
+/* Body */
+.post-card__body {
+    @apply transition-all duration-300;
+}
+
+.post-card__body--blurred {
+    @apply blur-md opacity-50 select-none pointer-events-none;
+}
+
+.post-card__clickable {
+    @apply cursor-pointer;
+}
+
+.post-card__link {
+    @apply block;
+}
+
+.post-card__title {
+    @apply text-lg font-medium text-white mb-2 hover:underline;
+}
+
+.post-card__text {
+    @apply text-gray-300 text-sm mb-3;
+}
+
+.post-card--compact .post-card__text {
+    @apply hidden;
+}
+
+/* Blur Overlay */
+.post-card__blur-overlay {
+    @apply absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none;
+}
+
+.post-card__blur-notice {
+    @apply bg-gray-900/90 border border-gray-700 rounded-lg px-4 py-2 flex items-center gap-2 text-gray-300 shadow-xl;
+}
+
+.post-card__blur-icon {
+    @apply text-red-500;
+}
+
+.post-card__blur-text {
+    @apply font-bold text-sm;
+}
+
+/* Footer */
+.post-card__footer {
+    @apply flex items-center gap-4 text-gray-400 text-sm mt-2 flex-wrap;
+}
+
+.post-card__action-button {
+    @apply flex items-center gap-1 hover:bg-gray-800 px-2 py-1 rounded transition-colors min-h-[3rem];
+}
+
+.post-card__flair {
+    @apply bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full text-xs border border-gray-700;
+}
+
+.post-card__read-button {
+    @apply ml-auto flex items-center gap-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 px-3 py-1 rounded-full text-xs font-bold transition-colors;
+}

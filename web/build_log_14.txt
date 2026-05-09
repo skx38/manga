@@ -1,0 +1,14 @@
+﻿
+> web@0.1.0 build
+> next build
+
+   Γû▓ Next.js 16.0.5 (Turbopack)
+   - Environments: .env.local, .env
+
+   Creating an optimized production build ...
+ Γ£ô Compiled successfully in 3.3s
+   Running TypeScript ...
+   Collecting page data using 31 workers ...
+   Generating static pages using 31 workers (0/31) ...
+   Generating static pages using 31 workers (7/31) 
+   Generating static pages using 31 workers (15/31) 

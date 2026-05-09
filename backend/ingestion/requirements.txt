@@ -1,0 +1,3 @@
+feedparser
+fuzzywuzzy
+python-Levenshtein
