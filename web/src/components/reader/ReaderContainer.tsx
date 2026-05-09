@@ -217,6 +217,7 @@ export default function ReaderContainer({
                     ) : (
                         <PageReader
                             pages={pages}
+                            chapterId={chapterId}
                             onNextChapter={() => nextChapterId && (window.location.href = `/reader/${nextChapterId}`)}
                             onPrevChapter={() => prevChapterId && (window.location.href = `/reader/${prevChapterId}`)}
                             onPageChange={handlePageChange}

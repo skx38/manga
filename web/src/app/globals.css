@@ -272,4 +272,19 @@
   .skeleton {
     @apply animate-pulse bg-muted rounded;
   }
+
+  /* Danmu (bullet comments) — translate from off-screen-right to off-screen-left */
+  @keyframes danmu-fly {
+    from { transform: translateX(0); }
+    to   { transform: translateX(calc(-100vw - 100%)); }
+  }
+  .animate-danmu-fly {
+    animation-name: danmu-fly;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+  .eink-mode .animate-danmu-fly {
+    animation: none !important;
+    display: none;
+  }
 }

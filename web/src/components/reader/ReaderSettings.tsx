@@ -11,6 +11,7 @@ export default function ReaderSettings() {
         doublePage, setDoublePage,
         theme, setTheme,
         einkMode, setEinkMode,
+        danmuEnabled, setDanmuEnabled,
     } = useReaderStore();
 
     return (
@@ -190,6 +191,22 @@ export default function ReaderSettings() {
                     </button>
                 </label>
                 <p className="text-[10px] text-gray-600 mt-1">Grayscale + no animations for e-ink devices.</p>
+            </div>
+
+            {/* Danmu */}
+            <div className="mb-2 mt-4">
+                <label className="flex items-center justify-between cursor-pointer">
+                    <span className="text-xs text-gray-500">Danmu (Bullet Comments)</span>
+                    <button
+                        role="switch"
+                        aria-checked={danmuEnabled}
+                        onClick={() => setDanmuEnabled(!danmuEnabled)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none ${danmuEnabled ? 'bg-blue-600' : 'bg-gray-700'}`}
+                    >
+                        <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg transition-transform ${danmuEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </button>
+                </label>
+                <p className="text-[10px] text-gray-600 mt-1">Live scrolling comments overlaid on the page.</p>
             </div>
 
         </div>

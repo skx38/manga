@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useReaderStore } from '@/store/readerStore';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import DanmuOverlay from './DanmuOverlay';
 
 interface Page {
     id: string;
@@ -13,14 +14,16 @@ interface Page {
 
 interface PageReaderProps {
     pages: Page[];
+    chapterId?: string;
     onNextChapter?: () => void;
     onPrevChapter?: () => void;
     onPageChange?: (pageIndex: number) => void;
 }
 
-export default function PageReader({ pages, onNextChapter, onPrevChapter, onPageChange }: PageReaderProps) {
-    const { direction, fitMode, zoom, doublePage } = useReaderStore();
+export default function PageReader({ pages, chapterId, onNextChapter, onPrevChapter, onPageChange }: PageReaderProps) {
+    const { direction, fitMode, zoom, doublePage, danmuEnabled } = useReaderStore();
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [danmuInputFocused, setDanmuInputFocused] = useState(false);
 
     // Reset index when pages change (new chapter)
     useEffect(() => {
@@ -60,22 +63,23 @@ export default function PageReader({ pages, onNextChapter, onPrevChapter, onPage
         }
     }, [currentIndex, onPrevChapter, doublePage, onPageChange]);
 
-    // Keyboard navigation
+    // Keyboard navigation (disabled while typing a danmu)
     useEffect(() => {
+        if (danmuInputFocused) return;
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'ArrowRight') {
                 isRTL ? goToPrev() : goToNext();
             } else if (e.key === 'ArrowLeft') {
                 isRTL ? goToNext() : goToPrev();
-            } else if (e.key === ' ') { // Spacebar
-                e.preventDefault(); // Prevent scroll
+            } else if (e.key === ' ') {
+                e.preventDefault();
                 goToNext();
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [goToNext, goToPrev, isRTL]);
+    }, [goToNext, goToPrev, isRTL, danmuInputFocused]);
 
     const getImageStyle = (page: Page) => {
         const baseStyle: React.CSSProperties = {};
@@ -136,6 +140,16 @@ export default function PageReader({ pages, onNextChapter, onPrevChapter, onPage
                         alt={`Page ${currentIndex + 2}`}
                         style={getImageStyle(nextPage)}
                         className="object-contain shadow-2xl"
+                    />
+                )}
+
+                {/* Danmu overlay (per-page) */}
+                {chapterId && (
+                    <DanmuOverlay
+                        chapterId={chapterId}
+                        pageIndex={currentIndex}
+                        enabled={danmuEnabled}
+                        onInputFocusChange={setDanmuInputFocused}
                     />
                 )}
             </div>

@@ -191,11 +191,27 @@ model ReadingProgress {
   pageNumber       Int
   scrollPercentage Float
   lastRead         DateTime @default(now())
-  
+
   user    User    @relation(fields: [userId], references: [id])
   chapter Chapter @relation(fields: [chapterId], references: [id])
-  
+
   @@id([userId, chapterId])
+}
+
+// Bullet comments overlaid on a page in the reader (Niconico-style).
+// pageIndex: 0-based page within the chapter.
+// trackY: 0-1 vertical position chosen client-side to avoid overlaps.
+model DanmuComment {
+  id         String   @id @default(uuid())
+  chapterId  String
+  pageIndex  Int
+  text       String   @db.VarChar(120)
+  trackY     Float    @default(0.1)
+  color      String?  // hex like #fff; null = default
+  userId     String
+  createdAt  DateTime @default(now())
+
+  @@index([chapterId, pageIndex])
 }
 
 model Tag {

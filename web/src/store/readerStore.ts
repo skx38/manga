@@ -15,6 +15,7 @@ interface ReaderState {
     doublePage: boolean;
     theme: Theme;
     einkMode: boolean;
+    danmuEnabled: boolean;
 
     setReadingMode: (mode: ReadingMode) => void;
     setDirection: (direction: ReadingDirection) => void;
@@ -25,6 +26,7 @@ interface ReaderState {
     setDoublePage: (double: boolean) => void;
     setTheme: (theme: Theme) => void;
     setEinkMode: (enabled: boolean) => void;
+    setDanmuEnabled: (enabled: boolean) => void;
 }
 
 export const useReaderStore = create<ReaderState>()(
@@ -38,6 +40,7 @@ export const useReaderStore = create<ReaderState>()(
             doublePage: false,
             theme: 'BLACK',
             einkMode: false,
+            danmuEnabled: true,
 
             setReadingMode: (mode) => set({ readingMode: mode }),
             setDirection: (direction) => set({ direction }),
@@ -48,6 +51,7 @@ export const useReaderStore = create<ReaderState>()(
             setDoublePage: (doublePage) => set({ doublePage }),
             setTheme: (theme) => set({ theme }),
             setEinkMode: (einkMode) => set({ einkMode }),
+            setDanmuEnabled: (danmuEnabled) => set({ danmuEnabled }),
         }),
         {
             name: 'reader-storage',
@@ -59,6 +63,7 @@ export const useReaderStore = create<ReaderState>()(
                 doublePage: state.doublePage,
                 theme: state.theme,
                 einkMode: state.einkMode,
+                danmuEnabled: state.danmuEnabled,
             }),
         }
     )
