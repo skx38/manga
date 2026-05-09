@@ -80,7 +80,7 @@ function calculateStats(stats: any[]) {
     return { currentStreak, longestStreak, totalChapters, daysActive };
 }
 
-export default async function UserProfilePage({ params }: { params: { username: string } }) {
+export default async function UserProfilePage({ params }: { params: Promise<{ username: string }> }) {
     const { username } = await params;
 
     // Fetch User with Activity Data

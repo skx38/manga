@@ -38,6 +38,10 @@
     "**/*.mts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "scripts",
+    "prisma/seed.js",
+    "prisma/import-comick.js",
+    "prisma/update-covers.js"
   ]
 }

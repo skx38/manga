@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.*
+
+# Build output
+.next/
+out/
+build/
+dist/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+build_log*.txt
+tsc_output*.txt
+ingest_log*.txt
+prisma_log*.txt
+prisma_gen_log*.txt
+verify_log*.txt
+debug_*.log
+debug-output.txt
+dev_log.txt
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Prisma
+src/generated/prisma/
+
+# Vercel
+.vercel
+
+# Backups & one-off scripts
+*.bak*
+ip_info.txt
+search_result.json
