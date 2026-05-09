@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, Bookmark, Eye, EyeOff } from 'lucide-react';
-import styles from './PostCard.module.css';
+import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, Bookmark, Eye, EyeOff, BookOpen } from 'lucide-react';
 
 interface PostCardProps {
     post: {
@@ -44,155 +43,157 @@ export default function PostCard({ post, onClick, compact = false, highlighted =
 
     const handleVote = async (value: number) => {
         const previousScore = score;
-        const previousUserVote = userVote;
+        const previousVote = userVote;
 
         let newScore = score;
-        let newUserVote = value;
+        let newVote = value;
 
         if (userVote === value) {
-            // Toggle off
             newScore = score - value;
-            newUserVote = 0;
+            newVote = 0;
         } else if (userVote === 0) {
-            // New vote
             newScore = score + value;
         } else {
-            // Switch vote
             newScore = score - userVote + value;
         }
 
-        // Optimistic update
         setScore(newScore);
-        setUserVote(newUserVote);
+        setUserVote(newVote);
 
         try {
-            await fetch('/api/community/posts/vote', {
+            const res = await fetch('/api/community/posts/vote', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ postId: post.id, value }),
             });
-        } catch (error) {
-            console.error(error);
-            // Revert on error
+            if (res.ok) {
+                const data = await res.json();
+                setScore(data.score);
+            } else {
+                setScore(previousScore);
+                setUserVote(previousVote);
+            }
+        } catch {
             setScore(previousScore);
-            setUserVote(previousUserVote);
+            setUserVote(previousVote);
         }
     };
 
     const isSpoilerOrNsfw = (post.spoiler || post.nsfw) && !revealed;
     const commentCount = post._count?.comments || 0;
-
-    const cardClasses = [
-        styles['post-card'],
-        compact && styles['post-card--compact'],
-        highlighted && styles['post-card--highlighted']
-    ].filter(Boolean).join(' ');
+    const scoreColor = userVote === 1 ? 'text-vote-up' : userVote === -1 ? 'text-vote-down' : 'text-foreground';
 
     return (
-        <article className={cardClasses}>
+        <article className={[
+            'bg-card border rounded-xl overflow-hidden flex transition-colors',
+            highlighted ? 'border-brand border-2' : 'border-border hover:border-border/80',
+            compact ? 'flex-row items-center p-2' : '',
+        ].filter(Boolean).join(' ')}>
+
             {/* Vote Column */}
-            <div className={styles['post-card__vote-column']}>
+            <div className={[
+                'flex flex-col items-center gap-0.5 bg-muted/30',
+                compact ? 'flex-row mr-3 bg-transparent' : 'p-2 w-12 border-r border-border',
+            ].filter(Boolean).join(' ')}>
                 <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        handleVote(1);
-                    }}
-                    className={`${styles['post-card__vote-button']} ${styles['post-card__vote-button--up']} ${userVote === 1 ? styles['post-card__vote-button--active'] : ''}`}
+                    onClick={(e) => { e.stopPropagation(); handleVote(1); }}
                     aria-label="Upvote"
+                    className={[
+                        'p-1.5 rounded-md transition-all active:scale-75 min-w-[2.75rem] min-h-[2.75rem] flex items-center justify-center',
+                        userVote === 1
+                            ? 'text-vote-up bg-vote-up/10 hover:bg-vote-up/20'
+                            : 'text-muted-foreground hover:text-vote-up hover:bg-vote-up/10',
+                    ].join(' ')}
                 >
-                    <ArrowBigUp size={24} fill={userVote === 1 ? 'currentColor' : 'none'} />
+                    <ArrowBigUp size={22} fill={userVote === 1 ? 'currentColor' : 'none'} />
                 </button>
 
-                <span className={`${styles['post-card__score']} ${score > 0 ? styles['post-card__score--positive'] : score < 0 ? styles['post-card__score--negative'] : ''}`}>
-                    {score}
-                </span>
+                <span className={`text-sm font-bold tabular-nums ${scoreColor}`}>{score}</span>
 
                 <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        handleVote(-1);
-                    }}
-                    className={`${styles['post-card__vote-button']} ${styles['post-card__vote-button--down']} ${userVote === -1 ? styles['post-card__vote-button--active'] : ''}`}
+                    onClick={(e) => { e.stopPropagation(); handleVote(-1); }}
                     aria-label="Downvote"
+                    className={[
+                        'p-1.5 rounded-md transition-all active:scale-75 min-w-[2.75rem] min-h-[2.75rem] flex items-center justify-center',
+                        userVote === -1
+                            ? 'text-vote-down bg-vote-down/10 hover:bg-vote-down/20'
+                            : 'text-muted-foreground hover:text-vote-down hover:bg-vote-down/10',
+                    ].join(' ')}
                 >
-                    <ArrowBigDown size={24} fill={userVote === -1 ? 'currentColor' : 'none'} />
+                    <ArrowBigDown size={22} fill={userVote === -1 ? 'currentColor' : 'none'} />
                 </button>
             </div>
 
             {/* Content */}
-            <div className={styles['post-card__content']}>
+            <div className={`flex-1 relative ${compact ? '' : 'p-3'}`}>
                 {/* Header */}
-                <header className={styles['post-card__header']}>
+                <header className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1 flex-wrap">
                     {post.comic && (
                         <>
-                            <Link href={`/comic/${post.comic.id}`} className={styles['post-card__comic-link']}>
+                            <Link href={`/comic/${post.comic.id}`} className="font-semibold text-foreground hover:text-brand transition-colors flex items-center gap-1">
                                 {post.comic.coverImage && (
-                                    <div className={styles['post-card__comic-avatar']}>
-                                        <Image
-                                            src={post.comic.coverImage}
-                                            alt={post.comic.title}
-                                            fill
-                                            className={styles['post-card__comic-image']}
-                                        />
+                                    <div className="w-4 h-4 rounded-full overflow-hidden relative flex-shrink-0">
+                                        <Image src={post.comic.coverImage} alt={post.comic.title} fill className="object-cover" />
                                     </div>
                                 )}
-                                <span className={styles['post-card__comic-name']}>{post.comic.title}</span>
+                                <span className="truncate">{post.comic.title}</span>
                             </Link>
-                            <span className={styles['post-card__separator']}>•</span>
+                            <span className="text-border">•</span>
                         </>
                     )}
-                    <span>Posted by</span>
-                    <Link href={`/user/${post.user.id}`} className={styles['post-card__author-link']}>
-                        <span className={styles['post-card__author-name']}>u/{post.user.username}</span>
+                    <span>by</span>
+                    <Link href={`/user/${post.user.id}`} className="hover:text-foreground transition-colors">
+                        u/{post.user.username}
                     </Link>
-                    <span className={styles['post-card__separator']}>•</span>
-                    <time className={styles['post-card__timestamp']}>
-                        {new Date(post.createdAt).toLocaleDateString()}
-                    </time>
+                    <span className="text-border">•</span>
+                    <time>{new Date(post.createdAt).toLocaleDateString()}</time>
                     {post.type && post.type !== 'TEXT' && (
-                        <span className={styles['post-card__context-badge']}>
+                        <span className="ml-auto bg-brand/10 text-brand px-2 py-0.5 rounded-full text-xs font-semibold">
                             {post.type}
+                        </span>
+                    )}
+                    {post.flair && (
+                        <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded-full text-xs border border-border">
+                            {post.flair}
                         </span>
                     )}
                 </header>
 
                 {/* Body */}
-                <div className={`${styles['post-card__body']} ${isSpoilerOrNsfw ? styles['post-card__body--blurred'] : ''} ${onClick ? styles['post-card__clickable'] : ''}`}>
-                    {onClick ? (
-                        <div onClick={onClick} className={styles['post-card__link']}>
-                            <h3 className={styles['post-card__title']}>{post.title}</h3>
-                            {post.content && !compact && (
-                                <p className={styles['post-card__text']}>
-                                    {post.content.length > 200 ? `${post.content.slice(0, 200)}...` : post.content}
-                                </p>
-                            )}
-                        </div>
-                    ) : (
-                        <>
-                            <h3 className={styles['post-card__title']}>{post.title}</h3>
-                            {post.content && !compact && (
-                                <p className={styles['post-card__text']}>
-                                    {post.content.length > 200 ? `${post.content.slice(0, 200)}...` : post.content}
-                                </p>
-                            )}
-                        </>
-                    )}
+                <div className={`relative ${isSpoilerOrNsfw ? 'select-none' : ''} ${onClick ? 'cursor-pointer' : ''}`}>
+                    <div className={isSpoilerOrNsfw ? 'blur-md opacity-40 pointer-events-none' : ''}>
+                        {onClick ? (
+                            <div onClick={onClick}>
+                                <h3 className="text-base font-semibold text-foreground mb-1.5 hover:text-brand transition-colors leading-snug">{post.title}</h3>
+                                {post.content && !compact && (
+                                    <p className="text-sm text-muted-foreground line-clamp-2">
+                                        {post.content}
+                                    </p>
+                                )}
+                            </div>
+                        ) : (
+                            <>
+                                <h3 className="text-base font-semibold text-foreground mb-1.5 leading-snug">{post.title}</h3>
+                                {post.content && !compact && (
+                                    <p className="text-sm text-muted-foreground line-clamp-2">{post.content}</p>
+                                )}
+                            </>
+                        )}
+                    </div>
 
-                    {/* Blur Overlay */}
+                    {/* Spoiler/NSFW Overlay */}
                     {isSpoilerOrNsfw && (
-                        <div className={styles['post-card__blur-overlay']}>
-                            <div className={styles['post-card__blur-notice']}>
-                                <EyeOff className={styles['post-card__blur-icon']} size={20} />
-                                <span className={styles['post-card__blur-text']}>
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="bg-card/90 backdrop-blur-sm border border-border rounded-lg px-4 py-2 flex items-center gap-2 shadow-lg pointer-events-auto">
+                                <EyeOff size={16} className="text-destructive flex-shrink-0" />
+                                <span className="text-sm font-semibold text-foreground">
                                     {post.spoiler ? 'Spoiler' : 'NSFW'}
                                 </span>
                                 <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setRevealed(true);
-                                    }}
-                                    className="ml-2 text-blue-400 hover:underline text-sm pointer-events-auto"
+                                    onClick={(e) => { e.stopPropagation(); setRevealed(true); }}
+                                    className="flex items-center gap-1 text-xs text-brand hover:underline"
                                 >
-                                    <Eye size={16} className="inline mr-1" />
+                                    <Eye size={14} />
                                     Reveal
                                 </button>
                             </div>
@@ -201,44 +202,41 @@ export default function PostCard({ post, onClick, compact = false, highlighted =
                 </div>
 
                 {/* Footer */}
-                <footer className={styles['post-card__footer']}>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onClick?.();
-                        }}
-                        className={styles['post-card__action-button']}
-                    >
-                        <MessageSquare size={16} />
-                        <span>{commentCount} {commentCount === 1 ? 'Comment' : 'Comments'}</span>
-                    </button>
-
-                    <button className={styles['post-card__action-button']}>
-                        <Share2 size={16} />
-                        <span>Share</span>
-                    </button>
-
-                    <button className={styles['post-card__action-button']}>
-                        <Bookmark size={16} />
-                        <span>Save</span>
-                    </button>
-
-                    {post.flair && (
-                        <span className={styles['post-card__flair']}>
-                            {post.flair}
-                        </span>
-                    )}
-
-                    {post.comic && (
-                        <Link
-                            href={`/reader/${post.comic.id}/1`}
-                            className={styles['post-card__read-button']}
-                            onClick={(e) => e.stopPropagation()}
+                {!compact && (
+                    <footer className="flex items-center gap-1 text-muted-foreground text-xs mt-2 flex-wrap">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+                            className="flex items-center gap-1.5 hover:bg-accent hover:text-accent-foreground px-2.5 py-1.5 rounded-md transition-colors min-h-[2.25rem]"
                         >
-                            📖 Read
-                        </Link>
-                    )}
-                </footer>
+                            <MessageSquare size={14} />
+                            <span>{commentCount} {commentCount === 1 ? 'Comment' : 'Comments'}</span>
+                        </button>
+
+                        <button
+                            onClick={() => navigator.clipboard.writeText(`${window.location.origin}/community/post/${post.id}`)}
+                            className="flex items-center gap-1.5 hover:bg-accent hover:text-accent-foreground px-2.5 py-1.5 rounded-md transition-colors min-h-[2.25rem]"
+                        >
+                            <Share2 size={14} />
+                            <span>Share</span>
+                        </button>
+
+                        <button className="flex items-center gap-1.5 hover:bg-accent hover:text-accent-foreground px-2.5 py-1.5 rounded-md transition-colors min-h-[2.25rem]">
+                            <Bookmark size={14} />
+                            <span>Save</span>
+                        </button>
+
+                        {post.comic && (
+                            <Link
+                                href={`/reader/${post.comic.id}/1`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="ml-auto flex items-center gap-1.5 bg-brand/10 text-brand hover:bg-brand/20 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors"
+                            >
+                                <BookOpen size={13} />
+                                Read
+                            </Link>
+                        )}
+                    </footer>
+                )}
             </div>
         </article>
     );

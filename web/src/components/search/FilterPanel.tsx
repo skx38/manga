@@ -9,6 +9,7 @@ import { ORIGIN_COLORS } from '@/lib/constants';
 interface Tag {
     id: number;
     name: string;
+    type: string;  // "Genre" | "Theme" | "Demographic" | "Format" | etc.
 }
 
 interface FilterPanelProps {
@@ -300,40 +301,18 @@ export default function FilterPanel({ availableTags, basePath = '/search' }: Fil
                             </div>
                         </div>
 
-                        {/* Tags */}
-                        <div className="pt-4 border-t border-gray-800">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-xs font-bold text-gray-500 uppercase">Tags</h3>
-                                {(includedTags.length > 0 || excludedTags.length > 0) && (
-                                    <button
-                                        onClick={() => {
-                                            setIncludedTags([]);
-                                            setExcludedTags([]);
-                                            updateUrl([], [], origins, pubStatuses, contentRatings, minChapters, dateFrom, dateTo, sort);
-                                        }}
-                                        className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
-                                    >
-                                        <X size={12} /> Reset Tags
-                                    </button>
-                                )}
-                            </div>
-                            <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                                {availableTags.map((tag) => {
-                                    let tagStatus: TagStatus = 'neutral';
-                                    if (includedTags.includes(tag.id)) tagStatus = 'include';
-                                    if (excludedTags.includes(tag.id)) tagStatus = 'exclude';
-
-                                    return (
-                                        <TagSelector
-                                            key={tag.id}
-                                            tag={tag}
-                                            status={tagStatus}
-                                            onChange={(newStatus) => handleTagChange(tag.id, newStatus)}
-                                        />
-                                    );
-                                })}
-                            </div>
-                        </div>
+                        {/* Tags grouped by category */}
+                        <TagGroupsSection
+                            availableTags={availableTags}
+                            includedTags={includedTags}
+                            excludedTags={excludedTags}
+                            onTagChange={(tagId, newStatus) => handleTagChange(tagId, newStatus)}
+                            onResetTags={() => {
+                                setIncludedTags([]);
+                                setExcludedTags([]);
+                                updateUrl([], [], origins, pubStatuses, contentRatings, minChapters, dateFrom, dateTo, sort);
+                            }}
+                        />
 
                         {/* Clear All */}
                         {activeFilterCount > 0 && (
@@ -349,6 +328,137 @@ export default function FilterPanel({ availableTags, basePath = '/search' }: Fil
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+// ── Tag groups accordion ────────────────────────────────────────────────
+
+const TAG_CATEGORY_ORDER = ['Demographic', 'Format', 'Genre', 'Theme'];
+
+function TagGroupsSection({
+    availableTags,
+    includedTags,
+    excludedTags,
+    onTagChange,
+    onResetTags,
+}: {
+    availableTags: { id: number; name: string; type: string }[];
+    includedTags: number[];
+    excludedTags: number[];
+    onTagChange: (tagId: number, status: TagStatus) => void;
+    onResetTags: () => void;
+}) {
+    // Group tags by type
+    const grouped = availableTags.reduce<Record<string, typeof availableTags>>(
+        (acc, tag) => {
+            const key = tag.type || 'Other';
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(tag);
+            return acc;
+        },
+        {}
+    );
+
+    // Sort category keys: known order first, then alphabetical
+    const categories = Object.keys(grouped).sort((a, b) => {
+        const ai = TAG_CATEGORY_ORDER.indexOf(a);
+        const bi = TAG_CATEGORY_ORDER.indexOf(b);
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+        return a.localeCompare(b);
+    });
+
+    const [openCategories, setOpenCategories] = useState<Record<string, boolean>>(
+        Object.fromEntries(categories.map((c, i) => [c, i < 2])) // open first 2
+    );
+
+    const toggle = (cat: string) =>
+        setOpenCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
+
+    const hasTagFilters = includedTags.length > 0 || excludedTags.length > 0;
+
+    return (
+        <div className="pt-4 border-t border-gray-800 space-y-2">
+            <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tags</h3>
+                {hasTagFilters && (
+                    <button
+                        onClick={onResetTags}
+                        className="text-xs text-destructive hover:text-destructive/80 flex items-center gap-1 transition-colors"
+                    >
+                        <X size={12} aria-hidden /> Reset tags
+                    </button>
+                )}
+            </div>
+
+            {/* Active tag chips */}
+            {hasTagFilters && (
+                <div className="flex flex-wrap gap-1.5 pb-2 mb-2 border-b border-gray-800">
+                    {includedTags.map(id => {
+                        const tag = availableTags.find(t => t.id === id);
+                        if (!tag) return null;
+                        return (
+                            <button
+                                key={`inc-${id}`}
+                                onClick={() => onTagChange(id, 'neutral')}
+                                className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-success/20 text-success border border-success/40 hover:bg-success/30 transition-colors"
+                                aria-label={`Remove include filter: ${tag.name}`}
+                            >
+                                <span>+</span>{tag.name}<X size={10} aria-hidden />
+                            </button>
+                        );
+                    })}
+                    {excludedTags.map(id => {
+                        const tag = availableTags.find(t => t.id === id);
+                        if (!tag) return null;
+                        return (
+                            <button
+                                key={`exc-${id}`}
+                                onClick={() => onTagChange(id, 'neutral')}
+                                className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/20 text-destructive border border-destructive/40 hover:bg-destructive/30 transition-colors"
+                                aria-label={`Remove exclude filter: ${tag.name}`}
+                            >
+                                <span>−</span>{tag.name}<X size={10} aria-hidden />
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* Grouped accordion */}
+            {categories.map(cat => (
+                <div key={cat} className="rounded-md border border-gray-800 overflow-hidden">
+                    <button
+                        onClick={() => toggle(cat)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-foreground hover:bg-gray-800/50 transition-colors"
+                        aria-expanded={openCategories[cat]}
+                    >
+                        <span>{cat}</span>
+                        {openCategories[cat]
+                            ? <ChevronUp size={14} aria-hidden />
+                            : <ChevronDown size={14} aria-hidden />}
+                    </button>
+                    {openCategories[cat] && (
+                        <div className="px-3 pb-3 pt-2 flex flex-wrap gap-2 border-t border-gray-800/60">
+                            {grouped[cat].map(tag => {
+                                let status: TagStatus = 'neutral';
+                                if (includedTags.includes(tag.id)) status = 'include';
+                                if (excludedTags.includes(tag.id)) status = 'exclude';
+                                return (
+                                    <TagSelector
+                                        key={tag.id}
+                                        tag={tag}
+                                        status={status}
+                                        onChange={s => onTagChange(tag.id, s)}
+                                    />
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            ))}
         </div>
     );
 }
