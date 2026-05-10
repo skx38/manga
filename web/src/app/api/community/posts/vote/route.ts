@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { getCurrentUserIdOrDemo } from '@/lib/session';
+import { rateLimit } from '@/lib/rateLimit';
 
 const prisma = new PrismaClient();
 
@@ -8,6 +9,9 @@ export async function POST(request: Request) {
     try {
         const userId = await getCurrentUserIdOrDemo();
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const limit = rateLimit(userId, 'vote', 60, 60_000);
+        if (!limit.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
 
         const { postId, value } = await request.json();
         if (!postId || value === undefined) {

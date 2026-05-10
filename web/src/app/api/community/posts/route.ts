@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { getCurrentUserIdOrDemo } from '@/lib/session';
+import { rateLimit } from '@/lib/rateLimit';
 
 const prisma = new PrismaClient();
 
@@ -170,24 +171,17 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const limit = rateLimit(userId, 'post.create', 5, 60_000);
+        if (!limit.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+
         const body = await request.json();
-        const { title, content, comicId, userId, flair } = body;
+        const { title, content, comicId, flair } = body;
 
-        if (!title || !comicId || !userId) {
+        if (!title || !comicId) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-        }
-
-        // Ensure user exists (Mock User Fix)
-        if (!userId) {
-            await prisma.user.upsert({
-                where: { id: userId },
-                update: {},
-                create: {
-                    id: userId,
-                    username: 'Demo User',
-                    email: 'demo_post_user@example.com',
-                }
-            });
         }
 
         const post = await prisma.post.create({
@@ -197,6 +191,57 @@ export async function POST(request: Request) {
         return NextResponse.json(post, { status: 201 });
     } catch (error) {
         console.error('Error creating post:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+export async function PATCH(request: Request) {
+    try {
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const body = await request.json();
+        const { id, title, content, flair } = body;
+        if (!id) return NextResponse.json({ error: 'Missing post id' }, { status: 400 });
+
+        const post = await prisma.post.findUnique({ where: { id }, select: { userId: true } });
+        if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+        if (post.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+        const data: any = { editedAt: new Date() };
+        if (typeof title === 'string' && title.trim()) data.title = title;
+        if (typeof content === 'string') data.content = content;
+        if (typeof flair === 'string' || flair === null) data.flair = flair;
+
+        const updated = await prisma.post.update({ where: { id }, data });
+        return NextResponse.json(updated);
+    } catch (error) {
+        console.error('Error updating post:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: Request) {
+    try {
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get('id');
+        if (!id) return NextResponse.json({ error: 'Missing post id' }, { status: 400 });
+
+        const post = await prisma.post.findUnique({ where: { id }, select: { userId: true } });
+        if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+        if (post.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+        // Soft-delete so vote tallies and comment threads survive.
+        const updated = await prisma.post.update({
+            where: { id },
+            data: { isDeleted: true, content: '[deleted]', title: '[deleted]' },
+        });
+        return NextResponse.json(updated);
+    } catch (error) {
+        console.error('Error deleting post:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

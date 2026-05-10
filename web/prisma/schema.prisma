@@ -241,11 +241,21 @@ model Post {
   userId    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  editedAt  DateTime?
+
+  // Mod / lifecycle flags
+  isDeleted Boolean  @default(false)  // author soft-deleted
+  isLocked  Boolean  @default(false)  // mod-locked, no new comments
+  isPinned  Boolean  @default(false)  // pinned to top of comic feed
+  isRemoved Boolean  @default(false)  // mod-removed, hidden from feed
 
   comic    Comic     @relation(fields: [comicId], references: [id], onDelete: Cascade)
   user     User      @relation(fields: [userId], references: [id])
   comments Comment[]
   votes    Vote[]
+
+  @@index([comicId, createdAt])
+  @@index([userId])
 }
 
 model Vote {
@@ -262,6 +272,8 @@ model Vote {
 
   @@unique([userId, postId])
   @@unique([userId, commentId])
+  @@index([postId])
+  @@index([commentId])
 }
 
 model Comment {
@@ -274,6 +286,7 @@ model Comment {
   isSpoiler Boolean  @default(false)
   isDeleted Boolean  @default(false)
   isEdited  Boolean  @default(false)
+  editedAt  DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -283,6 +296,9 @@ model Comment {
   parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
   replies  Comment[] @relation("CommentReplies")
   votes    Vote[]
+
+  @@index([postId, parentId])
+  @@index([userId])
 }
 
 model Subscription {

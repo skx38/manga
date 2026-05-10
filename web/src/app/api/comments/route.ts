@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { getCurrentUserIdOrDemo } from '@/lib/session';
+import { rateLimit } from '@/lib/rateLimit';
 
 const prisma = new PrismaClient();
 
@@ -56,6 +57,9 @@ export async function POST(request: Request) {
         const userId = await getCurrentUserIdOrDemo();
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const limit = rateLimit(userId, 'comment.create', 10, 60_000);
+        if (!limit.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+
         const body = await request.json();
         const { content, chapterId, postId, parentId, isSpoiler } = body;
 
@@ -77,15 +81,19 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
         if (!id) return NextResponse.json({ error: 'Missing comment ID' }, { status: 400 });
 
         const comment = await prisma.comment.findUnique({
             where: { id },
-            include: { _count: { select: { replies: true } } },
+            select: { userId: true },
         });
         if (!comment) return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
+        if (comment.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
         const updated = await prisma.comment.update({
             where: { id },
@@ -100,13 +108,23 @@ export async function DELETE(request: Request) {
 
 export async function PATCH(request: Request) {
     try {
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
         const body = await request.json();
         const { id, content } = body;
         if (!id || !content) return NextResponse.json({ error: 'Missing ID or content' }, { status: 400 });
 
+        const comment = await prisma.comment.findUnique({
+            where: { id },
+            select: { userId: true },
+        });
+        if (!comment) return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
+        if (comment.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
         const updated = await prisma.comment.update({
             where: { id },
-            data: { content, isEdited: true },
+            data: { content, isEdited: true, editedAt: new Date() },
         });
         return NextResponse.json(updated);
     } catch (error) {
