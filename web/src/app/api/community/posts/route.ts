@@ -101,7 +101,7 @@ export async function GET(request: Request) {
         // For MVP, we'll fetch a larger batch and sort in memory, or use raw SQL.
         // Let's use in-memory sort for simplicity on small scale.
 
-        const fetchLimit = sort === 'popular' || sort === 'top' ? 100 : limit; // Fetch more for ranking
+        const fetchLimit = sort === 'popular' || sort === 'top' || sort === 'controversial' ? 100 : limit; // Fetch more for ranking
 
         const posts = await prisma.post.findMany({
             where,
@@ -156,9 +156,22 @@ export async function GET(request: Request) {
             // Already filtered by time, just sort by score
             transformedPosts.sort((a, b) => b.score - a.score);
         }
+        else if (sort === 'controversial') {
+            // Reddit-style controversial: high engagement, score near zero.
+            // controversy = (up + down) * min(up,down) / max(up,down)
+            transformedPosts.sort((a: any, b: any) => {
+                const upA = a.votes.filter((v: any) => v.value === 1).length;
+                const downA = a.votes.filter((v: any) => v.value === -1).length;
+                const upB = b.votes.filter((v: any) => v.value === 1).length;
+                const downB = b.votes.filter((v: any) => v.value === -1).length;
+                const scoreA = upA + downA === 0 ? 0 : (upA + downA) * Math.min(upA, downA) / Math.max(upA, downA, 1);
+                const scoreB = upB + downB === 0 ? 0 : (upB + downB) * Math.min(upB, downB) / Math.max(upB, downB, 1);
+                return scoreB - scoreA;
+            });
+        }
 
         // 7. Apply Pagination (for memory-sorted lists)
-        if (sort === 'popular' || sort === 'top' || sort === 'rising') {
+        if (sort === 'popular' || sort === 'top' || sort === 'rising' || sort === 'controversial') {
             transformedPosts = transformedPosts.slice(skip, skip + limit);
         }
 

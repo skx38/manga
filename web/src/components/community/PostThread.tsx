@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, ChevronDown } from 'lucide-react';
 import RichTextParser from '../shared/RichTextParser';
@@ -81,11 +81,13 @@ function CommentItem({
     postId,
     depth,
     onReplySuccess,
+    focusCommentId,
 }: {
     comment: Comment;
     postId: string;
     depth: number;
     onReplySuccess: () => void;
+    focusCommentId?: string;
 }) {
     const [isReplying, setIsReplying] = useState(false);
     const [replyContent, setReplyContent] = useState('');
@@ -93,6 +95,17 @@ function CommentItem({
     const [score, setScore] = useState(comment.score || 0);
     const [userVote, setUserVote] = useState(comment.userVote || 0);
     const [showReplies, setShowReplies] = useState(depth < MAX_DEPTH);
+    const [highlight, setHighlight] = useState(false);
+    const itemRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (focusCommentId && focusCommentId === comment.id && itemRef.current) {
+            itemRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setHighlight(true);
+            const t = setTimeout(() => setHighlight(false), 2200);
+            return () => clearTimeout(t);
+        }
+    }, [focusCommentId, comment.id]);
 
     useEffect(() => {
         setScore(comment.score || 0);
@@ -154,7 +167,10 @@ function CommentItem({
     const replyCount = comment.replies?.length ?? 0;
 
     return (
-        <div className="flex gap-3 mt-3 group/comment">
+        <div
+            ref={itemRef}
+            className={`flex gap-3 mt-3 group/comment rounded-lg transition-all duration-700 ${highlight ? 'ring-2 ring-brand bg-brand/5 -mx-2 px-2' : ''}`}
+        >
             {/* Avatar + thread line */}
             <div className="flex flex-col items-center gap-0 flex-shrink-0">
                 <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${avatarColor(comment.user.username)} flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0`}>
@@ -191,7 +207,7 @@ function CommentItem({
                     </button>
 
                     <button
-                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/community/post/${postId}?commentId=${comment.id}`)}
+                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/community/post/${postId}/comment/${comment.id}`)}
                         className="flex items-center gap-1 px-2.5 py-1 rounded-full hover:bg-accent text-xs font-medium text-muted-foreground hover:text-accent-foreground transition-colors"
                     >
                         <Share2 size={13} />
@@ -252,6 +268,7 @@ function CommentItem({
                                         postId={postId}
                                         depth={depth + 1}
                                         onReplySuccess={onReplySuccess}
+                                        focusCommentId={focusCommentId}
                                     />
                                 ))}
                             </div>
@@ -263,7 +280,7 @@ function CommentItem({
     );
 }
 
-export default function PostThread({ postId }: { postId: string }) {
+export default function PostThread({ postId, focusCommentId }: { postId: string; focusCommentId?: string }) {
     const [post, setPost] = useState<Post | null>(null);
     const [comments, setComments] = useState<Comment[]>([]);
     const [loading, setLoading] = useState(true);
@@ -480,6 +497,7 @@ export default function PostThread({ postId }: { postId: string }) {
                                 postId={postId}
                                 depth={0}
                                 onReplySuccess={fetchComments}
+                                focusCommentId={focusCommentId}
                             />
                         ))
                     )}
