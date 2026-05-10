@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ThumbsUp, MessageSquare, Eye, Send, Smile, HelpCircle, MoreVertical, Trash2, Edit2, X, Check } from 'lucide-react';
+import { ThumbsUp, MessageSquare, Eye, Send, Smile, ExternalLink, MoreVertical, Trash2, Edit2, X, Check } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import Link from 'next/link';
 import RichTextParser from '../shared/RichTextParser';
 
 interface Comment {
@@ -30,6 +31,7 @@ export default function CommentSection({ chapterId, isBlurred, onUnblur }: Comme
     const [newComment, setNewComment] = useState('');
     const [loading, setLoading] = useState(true);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [communityPostId, setCommunityPostId] = useState<string | null>(null);
 
     useEffect(() => {
         fetchComments();
@@ -41,6 +43,11 @@ export default function CommentSection({ chapterId, isBlurred, onUnblur }: Comme
             if (res.ok) {
                 const data = await res.json();
                 setComments(data);
+                // The GET response now returns comments from the canonical chapter-discussion
+                // Post. Grab the postId from the first comment (all share the same postId).
+                if (data.length > 0 && data[0].postId) {
+                    setCommunityPostId(data[0].postId);
+                }
             }
         } catch (error) {
             console.error('Failed to fetch comments:', error);
@@ -200,6 +207,19 @@ export default function CommentSection({ chapterId, isBlurred, onUnblur }: Comme
 
             {/* Content (Scrollable) */}
             <div className={`flex-1 overflow-y-auto overflow-x-hidden p-4 transition-filter duration-300 ${isBlurred ? 'blur-sm pointer-events-none' : ''}`}>
+
+                {/* Community link */}
+                {communityPostId && (
+                    <div className="mb-4 flex justify-end">
+                        <Link
+                            href={`/community/post/${communityPostId}`}
+                            className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                        >
+                            <ExternalLink size={12} />
+                            View on community
+                        </Link>
+                    </div>
+                )}
 
                 {/* Input Area */}
                 <form onSubmit={handleSubmit} className="mb-6 relative">

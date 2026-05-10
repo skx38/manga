@@ -148,11 +148,17 @@ model Comic {
   reviews       Review[]
   libraryEntries LibraryEntry[]
   posts         Post[]
+  communityRules Json?
 }
 
 enum PageMode {
   STRIP    // Vertical scroll (Webtoon)
   PAGE     // Horizontal pages (Manga)
+}
+
+enum PostKind {
+  USER
+  CHAPTER_DISCUSSION
 }
 
 model Chapter {
@@ -170,7 +176,8 @@ model Chapter {
   pages       Page[]
   comments    Comment[]
   progress    ReadingProgress[]
-  
+  discussion  Post?
+
   @@unique([comicId, slug])
 }
 
@@ -234,11 +241,14 @@ model ComicTag {
 
 model Post {
   id        String   @id @default(uuid())
+  kind      PostKind @default(USER)
   title     String
   content   String?
   flair     String?  // e.g. "Theory", "Art", "Discussion"
   comicId   String
   userId    String
+  // For CHAPTER_DISCUSSION posts only — links back to the chapter that spawned this thread.
+  chapterId String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   editedAt  DateTime?
@@ -251,6 +261,7 @@ model Post {
 
   comic    Comic     @relation(fields: [comicId], references: [id], onDelete: Cascade)
   user     User      @relation(fields: [userId], references: [id])
+  chapter  Chapter?  @relation(fields: [chapterId], references: [id])
   comments Comment[]
   votes    Vote[]
 

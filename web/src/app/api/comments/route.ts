@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { rateLimit } from '@/lib/rateLimit';
+import { ensureChapterDiscussion } from '@/lib/chapterDiscussion';
 
 const prisma = new PrismaClient();
 
@@ -16,12 +17,16 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Missing chapterId or postId' }, { status: 400 });
         }
 
-        const where: any = { parentId: null };
-        if (chapterId) where.chapterId = chapterId;
-        if (postId) where.postId = postId;
+        // Resolve chapterId to the canonical chapter-discussion Post so both
+        // the reader and community surfaces share the same comment rows.
+        let resolvedPostId = postId;
+        if (chapterId) {
+            const post = await ensureChapterDiscussion(chapterId);
+            resolvedPostId = post.id;
+        }
 
         const comments = await prisma.comment.findMany({
-            where,
+            where: { postId: resolvedPostId!, parentId: null },
             include: {
                 user: { select: { id: true, username: true } },
                 votes: true,
@@ -67,8 +72,32 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
+        // Route chapter comments through the canonical chapter-discussion Post.
+        let resolvedPostId = postId as string | undefined;
+        if (chapterId) {
+            const post = await ensureChapterDiscussion(chapterId);
+            resolvedPostId = post.id;
+        }
+
+        // Check that the post isn't locked.
+        if (resolvedPostId) {
+            const post = await prisma.post.findUnique({
+                where: { id: resolvedPostId },
+                select: { isLocked: true },
+            });
+            if (post?.isLocked) {
+                return NextResponse.json({ error: 'Post is locked' }, { status: 403 });
+            }
+        }
+
         const comment = await prisma.comment.create({
-            data: { content, userId, chapterId, postId, parentId, isSpoiler: isSpoiler || false },
+            data: {
+                content,
+                userId,
+                postId: resolvedPostId,
+                parentId,
+                isSpoiler: isSpoiler || false,
+            },
             include: { user: { select: { id: true, username: true } } },
         });
 

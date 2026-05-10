@@ -34,7 +34,7 @@ Full plan is committed at the repo root as **`PLAN.md`** — read that for the d
 | 4a. Streaks | ✅ Done | `reader/progress/route.ts` — when a chapter is first completed (scroll >85%), updates `User.streakDays` and `User.lastReadDate`: extend if yesterday, reset if gap > 1 day. |
 | 4b. Danmu (bullet comments) | ✅ Done | `DanmuComment` model added to schema. `GET/POST /api/community/danmu` endpoints (session-derived userId, 120-char cap). `DanmuOverlay.tsx` component with right-to-left CSS keyframe animation, optimistic spawn on submit, input focus pauses keyboard nav. Wired into `PageReader`; toggle in `ReaderSettings` + `readerStore.danmuEnabled`. Hidden in e-ink mode. **Note:** run `npx prisma migrate dev --name add_danmu_comment` against your dev DB. |
 | 5a. Community security fixes (BLOCKER) | ✅ Done | `POST /community/posts` derives userId from session (was trusting client body — IDOR fix). Added `PATCH` (edit own post, sets editedAt) and `DELETE` (soft delete) handlers. Added ownership checks (403) to comment DELETE/PATCH; PATCH now stamps `editedAt`. New `web/src/lib/rateLimit.ts` token-bucket helper applied: 5/min posts, 10/min comments, 60/min votes (returns 429). Schema: Post got `editedAt`, `isDeleted`, `isLocked`, `isPinned`, `isRemoved` + indices `(comicId, createdAt)`, `(userId)`. Comment got `editedAt` + indices `(postId, parentId)`, `(userId)`. Vote got `(postId)`, `(commentId)` indices. **Note:** run `npx prisma migrate dev --name community_security_indices` against your dev DB. |
-| 5b. Data unification (chapter discussions = Posts) | ⏳ Pending | Reader chapter comments and community posts become the same rows so votes never split. `Post.kind` enum + `Post.chapterId`, `ensureChapterDiscussion()` helper, one-shot data migration repointing existing `Comment.chapterId` rows under auto-Posts. See PLAN.md §5b. |
+| 5b. Data unification (chapter discussions = Posts) | ✅ Done | `PostKind` enum (`USER \| CHAPTER_DISCUSSION`). `Post.chapterId String? @unique` + `Post.chapter` relation. `Chapter.discussion Post?` inverse. `web/src/lib/chapterDiscussion.ts` — `ensureChapterDiscussion(chapterId)` lazy upsert (system user `__system__`). `GET/POST /api/comments` now resolves `?chapterId=X` through the canonical Post so reader and community share one set of rows. One-shot backfill script: `cd web && npx tsx scripts/migrate-chapter-discussions.ts`. `CommentSection.tsx` shows "View on community →" link. **Note:** run `npx prisma migrate dev --name unify_chapter_discussions` against your dev DB, then the backfill script once. |
 | 5c. Reddit core UX | ⏳ Pending | `/c/{slug}` per-comic pages (rules + mod list), CreatePostModal type picker (TEXT/LINK/IMAGE), single-comment permalinks, FTS search, Controversial sort. See PLAN.md §5c. |
 | 5d. Engagement & social | ⏳ Pending | Real Saved (bookmark button is currently no-op), `@mention` parsing + Notifications model + bell icon in Navbar, karma counters on `/u/{username}`, nightly karma cron. See PLAN.md §5d. |
 | 5e. Moderation tools | ⏳ Pending | Report model + mod queue at `/c/{slug}/mod`, `ComicMod` join table, lock/pin/remove/distinguish actions, banned-words auto-flag. See PLAN.md §5e. |
@@ -44,16 +44,14 @@ Full plan is committed at the repo root as **`PLAN.md`** — read that for the d
 
 ## Where to pick up
 
-Phases 0–4b are **complete**. CI workflow is in place. **Phase 5 (Community Reddit-Grade Overhaul)** is approved and the next focus.
+Phases 0–5b are **complete**. **Next: Phase 5c — Reddit core UX** (per-comic `/c/{slug}` pages, CreatePostModal type picker, comment permalinks, FTS search, Controversial sort). Full details in `PLAN.md §5c`.
 
-**Next task — Phase 5a (BLOCKER, security):**
-1. `web/src/app/api/community/posts/route.ts` — replace client-supplied `userId` (line 174) with `getCurrentUserIdOrDemo()`. Drop the dead upsert at lines 181-191. Add `PATCH` (edit own post) + `DELETE` (soft delete) handlers.
-2. `web/src/app/api/comments/route.ts` — add `userId === comment.userId` ownership check to `DELETE` (line 78) and `PATCH` (line 101). Set `editedAt` on PATCH.
-3. `web/src/lib/rateLimit.ts` (NEW) — token-bucket helper. Apply to post create (5/min), comment create (10/min), vote (60/min).
-4. `web/prisma/schema.prisma` — add soft-delete/lock/pin fields to Post; `editedAt` to Comment; indices on Post(comicId, createdAt), Post(userId), Comment(postId, parentId), Comment(userId), Vote(postId), Vote(commentId).
-5. `npx prisma migrate dev --name community_security_indices` then `tsc --noEmit && lint && build` clean.
-
-After 5a passes verification, proceed to 5b (data unification — auto-Post per chapter). Full details in `PLAN.md`.
+**To run the 5b data migration on your dev DB:**
+```bash
+cd web
+npx prisma migrate dev --name unify_chapter_discussions
+npx tsx scripts/migrate-chapter-discussions.ts
+```
 
 ## Local dev quickstart
 
