@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Search, Loader2, Image as ImageIcon, Link as LinkIcon } from 'lucide-react';
+import { X, Search, Loader2, Image as ImageIcon, Link as LinkIcon, FileText } from 'lucide-react';
 import Image from 'next/image';
 
 interface Comic {
@@ -28,8 +28,11 @@ export default function CreatePostModal({ isOpen, onClose, preselectedComic, onP
     const [searching, setSearching] = useState(false);
 
     // Post State
+    const [postType, setPostType] = useState<'text' | 'link' | 'image'>('text');
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
+    const [linkUrl, setLinkUrl] = useState('');
+    const [imageUrl, setImageUrl] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
     // Reset state when opening
@@ -46,6 +49,9 @@ export default function CreatePostModal({ isOpen, onClose, preselectedComic, onP
             }
             setTitle('');
             setContent('');
+            setLinkUrl('');
+            setImageUrl('');
+            setPostType('text');
         }
     }, [isOpen, preselectedComic]);
 
@@ -84,6 +90,21 @@ export default function CreatePostModal({ isOpen, onClose, preselectedComic, onP
         e.preventDefault();
         if (!selectedComic || !title.trim()) return;
 
+        // Compose content + flair from post type. The schema has no Post.url
+        // field, so links and images are encoded as markdown the existing
+        // RichTextParser already understands.
+        let composedContent = content;
+        let flair: string | undefined;
+        if (postType === 'link') {
+            if (!linkUrl.trim()) return;
+            composedContent = `[${title}](${linkUrl})\n\n${content}`.trim();
+            flair = 'Link';
+        } else if (postType === 'image') {
+            if (!imageUrl.trim()) return;
+            composedContent = `![${title}](${imageUrl})\n\n${content}`.trim();
+            flair = 'Image';
+        }
+
         setSubmitting(true);
         try {
             const res = await fetch('/api/community/posts', {
@@ -91,9 +112,9 @@ export default function CreatePostModal({ isOpen, onClose, preselectedComic, onP
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title,
-                    content,
+                    content: composedContent,
                     comicId: selectedComic.id,
-                    userId: 'demo_user_id', // Mock ID
+                    flair,
                 }),
             });
 
@@ -212,6 +233,28 @@ export default function CreatePostModal({ isOpen, onClose, preselectedComic, onP
                                 </button>
                             </div>
 
+                            {/* Post type tabs */}
+                            <div className="flex gap-1 border-b border-gray-800 -mt-2">
+                                {([
+                                    { id: 'text' as const, icon: FileText, label: 'Text' },
+                                    { id: 'link' as const, icon: LinkIcon, label: 'Link' },
+                                    { id: 'image' as const, icon: ImageIcon, label: 'Image' },
+                                ]).map(({ id, icon: Icon, label }) => (
+                                    <button
+                                        key={id}
+                                        type="button"
+                                        onClick={() => setPostType(id)}
+                                        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                                            postType === id
+                                                ? 'border-blue-500 text-white'
+                                                : 'border-transparent text-gray-500 hover:text-gray-300'
+                                        }`}
+                                    >
+                                        <Icon size={16} /> {label}
+                                    </button>
+                                ))}
+                            </div>
+
                             <input
                                 type="text"
                                 placeholder="Title"
@@ -222,10 +265,32 @@ export default function CreatePostModal({ isOpen, onClose, preselectedComic, onP
                                 autoFocus
                             />
 
+                            {postType === 'link' && (
+                                <input
+                                    type="url"
+                                    placeholder="https://example.com"
+                                    value={linkUrl}
+                                    onChange={(e) => setLinkUrl(e.target.value)}
+                                    className="w-full bg-gray-800/30 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
+                                    required
+                                />
+                            )}
+
+                            {postType === 'image' && (
+                                <input
+                                    type="url"
+                                    placeholder="Image URL (https://…)"
+                                    value={imageUrl}
+                                    onChange={(e) => setImageUrl(e.target.value)}
+                                    className="w-full bg-gray-800/30 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
+                                    required
+                                />
+                            )}
+
                             <div className="relative">
                                 <textarea
                                     id="post-content"
-                                    placeholder="Text (optional)"
+                                    placeholder={postType === 'text' ? 'Text (optional)' : 'Description (optional)'}
                                     value={content}
                                     onChange={(e) => setContent(e.target.value)}
                                     className="w-full bg-gray-800/30 border border-gray-700 rounded-lg p-4 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-600 min-h-[200px] resize-none font-mono text-sm"

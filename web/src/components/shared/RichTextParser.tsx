@@ -65,59 +65,87 @@ function SpoilerBlock({ content }: { content: string }) {
 }
 
 function TextBlock({ content }: { content: string }) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    // First pass: split on @mentions so we can linkify them separately.
+    const mentionRegex = /@(\w{1,32})/g;
+    const preParts: (string | React.ReactNode)[] = [];
+    let lastMention = 0;
+    let mm: RegExpExecArray | null;
 
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = urlRegex.exec(content)) !== null) {
-        if (match.index > lastIndex) {
-            parts.push(content.slice(lastIndex, match.index));
+    while ((mm = mentionRegex.exec(content)) !== null) {
+        if (mm.index > lastMention) {
+            preParts.push(content.slice(lastMention, mm.index));
         }
-
-        const url = match[0];
-        const isImage = /\.(jpeg|jpg|gif|png|webp|svg)(\?.*)?$/i.test(url);
-        // Check for Tenor View URL: tenor.com/view/name-id
-        const tenorMatch = url.match(/tenor\.com\/view\/.*-(\d+)$/i);
-
-        if (isImage) {
-            parts.push(
-                <div key={match.index} className="my-2">
-                    <img
-                        src={url}
-                        alt="User embedded content"
-                        className="max-w-full max-h-96 rounded-lg border border-gray-800 hover:opacity-90 transition-opacity cursor-pointer"
-                        onClick={() => window.open(url, '_blank')}
-                        loading="lazy"
-                    />
-                </div>
-            );
-        } else if (tenorMatch) {
-            const tenorId = tenorMatch[1];
-            parts.push(
-                <TenorEmbed key={match.index} id={tenorId} />
-            );
-        } else {
-            parts.push(
-                <a
-                    key={match.index}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:underline inline-flex items-center gap-0.5"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    {url} <ExternalLink size={10} />
-                </a>
-            );
-        }
-
-        lastIndex = urlRegex.lastIndex;
+        const username = mm[1];
+        preParts.push(
+            <a
+                key={`mention-${mm.index}`}
+                href={`/u/${username}`}
+                className="text-brand hover:underline font-medium"
+                onClick={(e) => e.stopPropagation()}
+            >
+                @{username}
+            </a>
+        );
+        lastMention = mentionRegex.lastIndex;
+    }
+    if (lastMention < content.length) {
+        preParts.push(content.slice(lastMention));
     }
 
-    if (lastIndex < content.length) {
-        parts.push(content.slice(lastIndex));
+    // Second pass: run URL detection only on raw string segments.
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts: (string | React.ReactNode)[] = [];
+
+    for (const seg of preParts) {
+        if (typeof seg !== 'string') {
+            parts.push(seg);
+            continue;
+        }
+        let lastIndex = 0;
+        let match: RegExpExecArray | null;
+        urlRegex.lastIndex = 0;
+
+        while ((match = urlRegex.exec(seg)) !== null) {
+            if (match.index > lastIndex) {
+                parts.push(seg.slice(lastIndex, match.index));
+            }
+            const url = match[0];
+            const isImage = /\.(jpeg|jpg|gif|png|webp|svg)(\?.*)?$/i.test(url);
+            const tenorMatch = url.match(/tenor\.com\/view\/.*-(\d+)$/i);
+
+            if (isImage) {
+                parts.push(
+                    <div key={`img-${match.index}`} className="my-2">
+                        <img
+                            src={url}
+                            alt="User embedded content"
+                            className="max-w-full max-h-96 rounded-lg border border-gray-800 hover:opacity-90 transition-opacity cursor-pointer"
+                            onClick={() => window.open(url, '_blank')}
+                            loading="lazy"
+                        />
+                    </div>
+                );
+            } else if (tenorMatch) {
+                parts.push(<TenorEmbed key={`tenor-${match.index}`} id={tenorMatch[1]} />);
+            } else {
+                parts.push(
+                    <a
+                        key={`url-${match.index}`}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:underline inline-flex items-center gap-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {url} <ExternalLink size={10} />
+                    </a>
+                );
+            }
+            lastIndex = urlRegex.lastIndex;
+        }
+        if (lastIndex < seg.length) {
+            parts.push(seg.slice(lastIndex));
+        }
     }
 
     return <>{parts}</>;

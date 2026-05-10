@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(req: NextRequest) {
     try {
-        const userId = 'demo_user_id';
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const library = await prisma.libraryEntry.findMany({
             where: { userId },

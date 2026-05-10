@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 export async function GET() {
-    const userId = 'demo_user_id';
+    const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const folders = await prisma.folder.findMany({
         where: { userId },
         include: { comics: true },
@@ -16,7 +18,8 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const { name } = await request.json();
-        const userId = 'demo_user_id';
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const folder = await prisma.folder.create({
             data: {

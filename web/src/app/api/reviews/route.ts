@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 
 const prisma = new PrismaClient();
 
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
         }
 
         // Ensure user exists (Mock User Fix)
-        if (userId === 'demo_user_id') {
+        if (!userId) {
             await prisma.user.upsert({
                 where: { id: userId },
                 update: {},

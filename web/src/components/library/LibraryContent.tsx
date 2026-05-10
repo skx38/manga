@@ -67,11 +67,17 @@ export default function LibraryContent({ comics, folders }: any) {
         }
     });
 
+    const pageTitle = selectedFolderId
+        ? folders.find((f: any) => f.id === selectedFolderId)?.name ?? 'Folder'
+        : selectedStatus
+            ? selectedStatus.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l: string) => l.toUpperCase())
+            : 'All Comics';
+
     return (
-        <div className="flex min-h-screen bg-gray-950">
+        <div className="flex min-h-screen">
             {/* Sidebar */}
-            <div className="w-64 border-r border-gray-800 p-4 hidden md:block">
-                <h2 className="text-xl font-bold text-white mb-6 px-2">Library</h2>
+            <div className="w-64 border-r border-border p-4 hidden md:block">
+                <h2 className="text-xl font-bold text-foreground mb-6 px-2">Library</h2>
                 <FolderList
                     onSelectFolder={(id) => {
                         setSelectedFolderId(id);
@@ -86,35 +92,41 @@ export default function LibraryContent({ comics, folders }: any) {
             {/* Main Content */}
             <div className="flex-1 p-6">
                 <div className="flex items-center justify-between mb-6">
-                    <h1 className="text-2xl font-bold text-white">
-                        {selectedFolderId
-                            ? folders.find((f: any) => f.id === selectedFolderId)?.name
-                            : selectedStatus
-                                ? selectedStatus.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())
-                                : 'All Comics'}
-                    </h1>
-                    <span className="text-gray-400 text-sm">{sortedComics.length} items</span>
+                    <h1 className="text-2xl font-bold text-foreground">{pageTitle}</h1>
+                    <span className="text-muted-foreground text-sm">{sortedComics.length} items</span>
                 </div>
 
                 <div className="mb-6">
                     <FilterPanel availableTags={uniqueTags} basePath="/library" />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                    {sortedComics.map((comic: any) => (
-                        <ComicCard
-                            key={comic.id}
-                            id={comic.id}
-                            title={comic.title}
-                            coverUrl={comic.coverImageUrl || '/placeholder-cover.png'}
-                            type={comic.type}
-                            rating={8.5}
-                            currentStatus={comic.myStatus}
-                            folders={folders}
-                            comicFolderIds={comic.folderIds}
-                        />
-                    ))}
-                </div>
+                {sortedComics.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-24 text-center">
+                        <p className="text-4xl mb-4">📚</p>
+                        <h3 className="text-lg font-semibold text-foreground mb-1">Nothing here yet</h3>
+                        <p className="text-muted-foreground text-sm">
+                            {selectedStatus || selectedFolderId
+                                ? 'No comics match this filter.'
+                                : 'Add comics to your library to track your reading progress.'}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                        {sortedComics.map((comic: any) => (
+                            <ComicCard
+                                key={comic.id}
+                                id={comic.id}
+                                title={comic.title}
+                                coverUrl={comic.coverImageUrl || '/placeholder-cover.png'}
+                                type={comic.type}
+                                rating={8.5}
+                                currentStatus={comic.myStatus}
+                                folders={folders}
+                                comicFolderIds={comic.folderIds}
+                            />
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

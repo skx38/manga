@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
+import { rateLimit } from '@/lib/rateLimit';
+import { isCommunityMod, detectBannedWord } from '@/lib/permissions';
 
 const prisma = new PrismaClient();
 
@@ -29,7 +32,7 @@ export async function GET(request: Request) {
             const postWithRelations = post as any;
             const upvotes = postWithRelations.votes.filter((v: any) => v.value === 1).length;
             const downvotes = postWithRelations.votes.filter((v: any) => v.value === -1).length;
-            const currentUserId = 'demo_user_id';
+            const currentUserId = await getCurrentUserIdOrDemo() ?? '';
             const userVote = postWithRelations.votes.find((v: any) => v.userId === currentUserId)?.value || 0;
 
             return NextResponse.json({
@@ -40,7 +43,7 @@ export async function GET(request: Request) {
             });
         }
 
-        const currentUserId = 'demo_user_id'; // Hardcoded for now
+        const currentUserId = await getCurrentUserIdOrDemo() ?? '';
         const time = searchParams.get('time') || 'all'; // day, week, month, all
 
         // 1. Build Base Query
@@ -99,7 +102,7 @@ export async function GET(request: Request) {
         // For MVP, we'll fetch a larger batch and sort in memory, or use raw SQL.
         // Let's use in-memory sort for simplicity on small scale.
 
-        const fetchLimit = sort === 'popular' || sort === 'top' ? 100 : limit; // Fetch more for ranking
+        const fetchLimit = sort === 'popular' || sort === 'top' || sort === 'controversial' ? 100 : limit; // Fetch more for ranking
 
         const posts = await prisma.post.findMany({
             where,
@@ -154,9 +157,22 @@ export async function GET(request: Request) {
             // Already filtered by time, just sort by score
             transformedPosts.sort((a, b) => b.score - a.score);
         }
+        else if (sort === 'controversial') {
+            // Reddit-style controversial: high engagement, score near zero.
+            // controversy = (up + down) * min(up,down) / max(up,down)
+            transformedPosts.sort((a: any, b: any) => {
+                const upA = a.votes.filter((v: any) => v.value === 1).length;
+                const downA = a.votes.filter((v: any) => v.value === -1).length;
+                const upB = b.votes.filter((v: any) => v.value === 1).length;
+                const downB = b.votes.filter((v: any) => v.value === -1).length;
+                const scoreA = upA + downA === 0 ? 0 : (upA + downA) * Math.min(upA, downA) / Math.max(upA, downA, 1);
+                const scoreB = upB + downB === 0 ? 0 : (upB + downB) * Math.min(upB, downB) / Math.max(upB, downB, 1);
+                return scoreB - scoreA;
+            });
+        }
 
         // 7. Apply Pagination (for memory-sorted lists)
-        if (sort === 'popular' || sort === 'top' || sort === 'rising') {
+        if (sort === 'popular' || sort === 'top' || sort === 'rising' || sort === 'controversial') {
             transformedPosts = transformedPosts.slice(skip, skip + limit);
         }
 
@@ -169,33 +185,122 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        const body = await request.json();
-        const { title, content, comicId, userId, flair } = body;
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        if (!title || !comicId || !userId) {
+        const limit = rateLimit(userId, 'post.create', 5, 60_000);
+        if (!limit.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+
+        const body = await request.json();
+        const { title, content, comicId, flair } = body;
+
+        if (!title || !comicId) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        // Ensure user exists (Mock User Fix)
-        if (userId === 'demo_user_id') {
-            await prisma.user.upsert({
-                where: { id: userId },
-                update: {},
-                create: {
-                    id: userId,
-                    username: 'Demo User',
-                    email: 'demo_post_user@example.com',
-                }
-            });
-        }
+        // Banned-word filter — auto-flag rather than reject so mods can review.
+        const comic = await prisma.comic.findUnique({
+            where: { id: comicId },
+            select: { bannedWords: true },
+        });
+        const hit = detectBannedWord(`${title}\n${content || ''}`, comic?.bannedWords ?? []);
 
         const post = await prisma.post.create({
-            data: { title, content: content || "", comicId, userId, flair },
+            data: {
+                title,
+                content: content || "",
+                comicId,
+                userId,
+                flair,
+                isRemoved: !!hit,
+            },
         });
+
+        if (hit) {
+            await prisma.report.create({
+                data: { reporterId: userId, postId: post.id, reason: 'SPAM', details: `Auto-flag: banned word "${hit}"` },
+            });
+        }
 
         return NextResponse.json(post, { status: 201 });
     } catch (error) {
         console.error('Error creating post:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+export async function PATCH(request: Request) {
+    try {
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const body = await request.json();
+        const { id, title, content, flair, isLocked, isPinned, isRemoved } = body;
+        if (!id) return NextResponse.json({ error: 'Missing post id' }, { status: 400 });
+
+        const post = await prisma.post.findUnique({
+            where: { id },
+            select: { userId: true, comicId: true },
+        });
+        if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+
+        const isOwner = post.userId === userId;
+        const isMod = await isCommunityMod(userId, post.comicId);
+
+        const isModAction =
+            typeof isLocked === 'boolean' ||
+            typeof isPinned === 'boolean' ||
+            typeof isRemoved === 'boolean';
+
+        // Author can edit content; mod can flip lifecycle flags.
+        if (!isOwner && !isMod) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        if (isModAction && !isMod) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+        const data: any = {};
+        if (isOwner) {
+            if (typeof title === 'string' && title.trim()) data.title = title;
+            if (typeof content === 'string') data.content = content;
+            if (typeof flair === 'string' || flair === null) data.flair = flair;
+            if (Object.keys(data).length > 0) data.editedAt = new Date();
+        }
+        if (isMod) {
+            if (typeof isLocked === 'boolean') data.isLocked = isLocked;
+            if (typeof isPinned === 'boolean') data.isPinned = isPinned;
+            if (typeof isRemoved === 'boolean') data.isRemoved = isRemoved;
+        }
+        if (Object.keys(data).length === 0) {
+            return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+        }
+
+        const updated = await prisma.post.update({ where: { id }, data });
+        return NextResponse.json(updated);
+    } catch (error) {
+        console.error('Error updating post:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: Request) {
+    try {
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get('id');
+        if (!id) return NextResponse.json({ error: 'Missing post id' }, { status: 400 });
+
+        const post = await prisma.post.findUnique({ where: { id }, select: { userId: true } });
+        if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+        if (post.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+        // Soft-delete so vote tallies and comment threads survive.
+        const updated = await prisma.post.update({
+            where: { id },
+            data: { isDeleted: true, content: '[deleted]', title: '[deleted]' },
+        });
+        return NextResponse.json(updated);
+    } catch (error) {
+        console.error('Error deleting post:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

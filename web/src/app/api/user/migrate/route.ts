@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { getServerSession } from 'next-auth';
 // import { authOptions } from '@/app/api/auth/[...nextauth]/route'; // Circular dependency potential, need to define options separately or use helper
 
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
     // }
 
     // For development/demo without full OAuth setup yet:
-    const userId = 'demo_user_id'; // Fallback
+    const userId = await getCurrentUserIdOrDemo();
 
     try {
         const { library, history } = await req.json();

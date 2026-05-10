@@ -1,13 +1,13 @@
 import { PrismaClient } from '@prisma/client';
 import LibraryContent from '@/components/library/LibraryContent';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 
 const prisma = new PrismaClient();
 
 // Force dynamic rendering to always fetch fresh data
 export const dynamic = 'force-dynamic';
 
-async function getData() {
-    const userId = 'demo_user_id';
+async function getData(userId: string) {
 
     // Fetch library entries, folders with comics
     const [libraryEntries, folders] = await Promise.all([
@@ -79,6 +79,25 @@ async function getData() {
 }
 
 export default async function LibraryPage() {
-    const { comics, folders } = await getData();
+    const userId = await getCurrentUserIdOrDemo();
+    if (!userId) {
+        return (
+            <div className="min-h-screen flex items-center justify-center text-center px-4">
+                <div className="max-w-md">
+                    <h1 className="text-2xl font-bold mb-2">Sign in to use your library</h1>
+                    <p className="text-muted-foreground mb-6">
+                        Track what you&apos;re reading, organize folders, and sync progress across devices.
+                    </p>
+                    <a
+                        href="/api/auth/signin"
+                        className="inline-flex h-10 items-center rounded-md bg-primary px-4 font-medium text-primary-foreground hover:bg-primary/90"
+                    >
+                        Sign in
+                    </a>
+                </div>
+            </div>
+        );
+    }
+    const { comics, folders } = await getData(userId);
     return <LibraryContent comics={comics} folders={folders} />;
 }

@@ -1,10 +1,86 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
+import { rateLimit } from '@/lib/rateLimit';
+import { ensureChapterDiscussion } from '@/lib/chapterDiscussion';
+import { detectBannedWord } from '@/lib/permissions';
+
+/** Extract unique @username mentions from comment content. */
+function parseMentions(content: string): string[] {
+    const matches = content.match(/@(\w{1,32})/g) ?? [];
+    return [...new Set(matches.map((m) => m.slice(1)))];
+}
 
 const prisma = new PrismaClient();
 
+async function createCommentNotifications({
+    comment,
+    userId,
+    parentId,
+    resolvedPostId,
+}: {
+    comment: { id: string; content: string };
+    userId: string;
+    parentId?: string;
+    resolvedPostId?: string;
+}) {
+    try {
+        const jobs: Promise<any>[] = [];
+
+        // REPLY notification: tell the parent comment author they got a reply.
+        if (parentId) {
+            const parent = await prisma.comment.findUnique({
+                where: { id: parentId },
+                select: { userId: true },
+            });
+            if (parent && parent.userId !== userId) {
+                jobs.push(
+                    prisma.notification.create({
+                        data: {
+                            userId: parent.userId,
+                            type: 'REPLY',
+                            actorId: userId,
+                            commentId: comment.id,
+                            postId: resolvedPostId,
+                        },
+                    })
+                );
+            }
+        }
+
+        // MENTION notifications: parse @username and notify each mentioned user.
+        const mentions = parseMentions(comment.content);
+        if (mentions.length > 0) {
+            const mentionedUsers = await prisma.user.findMany({
+                where: { username: { in: mentions } },
+                select: { id: true },
+            });
+            for (const mu of mentionedUsers) {
+                if (mu.id !== userId) {
+                    jobs.push(
+                        prisma.notification.create({
+                            data: {
+                                userId: mu.id,
+                                type: 'MENTION',
+                                actorId: userId,
+                                commentId: comment.id,
+                                postId: resolvedPostId,
+                            },
+                        })
+                    );
+                }
+            }
+        }
+
+        await Promise.all(jobs);
+    } catch (e) {
+        console.error('Notification creation failed (non-fatal):', e);
+    }
+}
+
 export async function GET(request: Request) {
     try {
+        const currentUserId = await getCurrentUserIdOrDemo();
         const { searchParams } = new URL(request.url);
         const chapterId = searchParams.get('chapterId');
         const postId = searchParams.get('postId');
@@ -13,15 +89,16 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Missing chapterId or postId' }, { status: 400 });
         }
 
-        const where: any = {};
-        if (chapterId) where.chapterId = chapterId;
-        if (postId) where.postId = postId;
-
-        // Only fetch top-level comments, then include replies
-        where.parentId = null;
+        // Resolve chapterId to the canonical chapter-discussion Post so both
+        // the reader and community surfaces share the same comment rows.
+        let resolvedPostId = postId;
+        if (chapterId) {
+            const post = await ensureChapterDiscussion(chapterId);
+            resolvedPostId = post.id;
+        }
 
         const comments = await prisma.comment.findMany({
-            where,
+            where: { postId: resolvedPostId!, parentId: null },
             include: {
                 user: { select: { id: true, username: true } },
                 votes: true,
@@ -30,26 +107,20 @@ export async function GET(request: Request) {
                         user: { select: { id: true, username: true } },
                         votes: true,
                     },
-                    orderBy: { createdAt: 'asc' }
-                }
+                    orderBy: { createdAt: 'asc' },
+                },
             },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
         });
 
-        // Transform to add scores and user vote
-        const transform = (c: any) => {
-            // In a real app, we would get the current user ID from session/token
-            // For now, we check against 'demo_user_id'
-            const currentUserId = 'demo_user_id';
-            const userVote = c.votes.find((v: any) => v.userId === currentUserId)?.value || 0;
-
-            return {
-                ...c,
-                score: c.votes.reduce((acc: number, v: any) => acc + v.value, 0),
-                userVote,
-                replies: c.replies?.map(transform) || []
-            };
-        };
+        const transform = (c: any): any => ({
+            ...c,
+            score: c.votes.reduce((acc: number, v: any) => acc + v.value, 0),
+            userVote: currentUserId
+                ? c.votes.find((v: any) => v.userId === currentUserId)?.value || 0
+                : 0,
+            replies: c.replies?.map(transform) || [],
+        });
 
         return NextResponse.json(comments.map(transform));
     } catch (error) {
@@ -60,39 +131,73 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        const body = await request.json();
-        const { content, userId, chapterId, postId, parentId, isSpoiler } = body;
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        if (!content || !userId || (!chapterId && !postId)) {
+        const limit = rateLimit(userId, 'comment.create', 10, 60_000);
+        if (!limit.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+
+        const body = await request.json();
+        const { content, chapterId, postId, parentId, isSpoiler } = body;
+
+        if (!content || (!chapterId && !postId)) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        // Ensure user exists (Mock User Fix)
-        if (userId === 'demo_user_id') {
-            await prisma.user.upsert({
-                where: { id: userId },
-                update: {},
-                create: {
-                    id: userId,
-                    username: 'Demo User',
-                    email: 'demo_comment_user@example.com',
-                }
+        // Route chapter comments through the canonical chapter-discussion Post.
+        let resolvedPostId = postId as string | undefined;
+        if (chapterId) {
+            const post = await ensureChapterDiscussion(chapterId);
+            resolvedPostId = post.id;
+        }
+
+        // Check that the post isn't locked, and grab the comicId for banned-word lookup.
+        let comicId: string | null = null;
+        if (resolvedPostId) {
+            const post = await prisma.post.findUnique({
+                where: { id: resolvedPostId },
+                select: { isLocked: true, comicId: true },
             });
+            if (post?.isLocked) {
+                return NextResponse.json({ error: 'Post is locked' }, { status: 403 });
+            }
+            comicId = post?.comicId ?? null;
+        }
+
+        // Banned-word filter — auto-flag rather than reject.
+        let bannedHit: string | null = null;
+        if (comicId) {
+            const comic = await prisma.comic.findUnique({
+                where: { id: comicId },
+                select: { bannedWords: true },
+            });
+            bannedHit = detectBannedWord(content, comic?.bannedWords ?? []);
         }
 
         const comment = await prisma.comment.create({
             data: {
                 content,
                 userId,
-                chapterId,
-                postId,
+                postId: resolvedPostId,
                 parentId,
                 isSpoiler: isSpoiler || false,
             },
-            include: {
-                user: { select: { id: true, username: true } }
-            }
+            include: { user: { select: { id: true, username: true } } },
         });
+
+        if (bannedHit) {
+            await prisma.report.create({
+                data: {
+                    reporterId: userId,
+                    commentId: comment.id,
+                    reason: 'SPAM',
+                    details: `Auto-flag: banned word "${bannedHit}"`,
+                },
+            });
+        }
+
+        // Fire-and-forget notifications (don't await so the response is fast).
+        void createCommentNotifications({ comment, userId, parentId, resolvedPostId });
 
         return NextResponse.json(comment, { status: 201 });
     } catch (error) {
@@ -103,37 +208,24 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
+        if (!id) return NextResponse.json({ error: 'Missing comment ID' }, { status: 400 });
 
-        if (!id) {
-            return NextResponse.json({ error: 'Missing comment ID' }, { status: 400 });
-        }
-
-        // Check if comment has replies
         const comment = await prisma.comment.findUnique({
             where: { id },
-            include: { _count: { select: { replies: true } } }
+            select: { userId: true },
         });
-
-        if (!comment) {
-            return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
-        }
-
-        // If replies exist, mark as deleted. If not, hard delete (optional, but let's stick to mark as deleted for consistency or hard delete if leaf)
-        // Reddit style: always mark as deleted if it has children, or just mark as deleted to preserve tree structure.
-        // Let's mark as deleted.
+        if (!comment) return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
+        if (comment.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
         const updated = await prisma.comment.update({
             where: { id },
-            data: {
-                isDeleted: true,
-                content: '[deleted]',
-                // We might want to keep the user relation or disconnect it. Reddit shows [deleted] user.
-                // For now, let's keep the user but frontend will display [deleted]
-            }
+            data: { isDeleted: true, content: '[deleted]' },
         });
-
         return NextResponse.json(updated);
     } catch (error) {
         console.error('Error deleting comment:', error);
@@ -143,21 +235,24 @@ export async function DELETE(request: Request) {
 
 export async function PATCH(request: Request) {
     try {
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
         const body = await request.json();
         const { id, content } = body;
+        if (!id || !content) return NextResponse.json({ error: 'Missing ID or content' }, { status: 400 });
 
-        if (!id || !content) {
-            return NextResponse.json({ error: 'Missing ID or content' }, { status: 400 });
-        }
+        const comment = await prisma.comment.findUnique({
+            where: { id },
+            select: { userId: true },
+        });
+        if (!comment) return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
+        if (comment.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
         const updated = await prisma.comment.update({
             where: { id },
-            data: {
-                content,
-                isEdited: true
-            }
+            data: { content, isEdited: true, editedAt: new Date() },
         });
-
         return NextResponse.json(updated);
     } catch (error) {
         console.error('Error updating comment:', error);

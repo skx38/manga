@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -10,7 +11,8 @@ export async function POST(
     try {
         const { id } = await params;
         const { rating } = await request.json(); // rating is 1-10 (or 1-5, let's assume 1-10 for precision, displayed as 5 stars)
-        const userId = 'demo_user_id'; // Hardcoded
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         if (typeof rating !== 'number' || rating < 0 || rating > 10) {
             return NextResponse.json({ error: 'Invalid rating' }, { status: 400 });

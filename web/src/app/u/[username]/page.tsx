@@ -4,7 +4,8 @@ import Image from 'next/image';
 import { calculateLevel, getLevelTitle } from '@/lib/gamification';
 import StatCircle from '@/components/profile/StatCircle';
 import ActivityHeatmap from '@/components/profile/ActivityHeatmap';
-import { Calendar, MapPin, Link as LinkIcon, Flame, BookOpen, Trophy } from 'lucide-react';
+import { Calendar, MapPin, Flame, BookOpen, Trophy, ArrowBigUp, MessageSquare } from 'lucide-react';
+import Link from 'next/link';
 
 // Helper to calculate stats
 function calculateStats(stats: any[]) {
@@ -80,7 +81,7 @@ function calculateStats(stats: any[]) {
     return { currentStreak, longestStreak, totalChapters, daysActive };
 }
 
-export default async function UserProfilePage({ params }: { params: { username: string } }) {
+export default async function UserProfilePage({ params }: { params: Promise<{ username: string }> }) {
     const { username } = await params;
 
     // Fetch User with Activity Data
@@ -200,6 +201,24 @@ export default async function UserProfilePage({ params }: { params: { username: 
                                 {profileUser.bio}
                             </p>
 
+                            {/* Karma */}
+                            <div className="grid grid-cols-2 gap-3 mb-6">
+                                <div className="bg-gray-800/50 rounded-xl p-3 text-center border border-gray-700/50">
+                                    <div className="flex items-center justify-center gap-1 text-orange-400 mb-1">
+                                        <ArrowBigUp size={14} />
+                                        <span className="text-xs font-bold uppercase tracking-wide">Post</span>
+                                    </div>
+                                    <div className="text-lg font-bold text-white">{(profileUser.postKarma ?? 0).toLocaleString()}</div>
+                                </div>
+                                <div className="bg-gray-800/50 rounded-xl p-3 text-center border border-gray-700/50">
+                                    <div className="flex items-center justify-center gap-1 text-green-400 mb-1">
+                                        <MessageSquare size={12} />
+                                        <span className="text-xs font-bold uppercase tracking-wide">Comment</span>
+                                    </div>
+                                    <div className="text-lg font-bold text-white">{(profileUser.commentKarma ?? 0).toLocaleString()}</div>
+                                </div>
+                            </div>
+
                             <div className="space-y-3 text-sm text-gray-400">
                                 <div className="flex items-center gap-3">
                                     <Calendar size={16} />
@@ -260,6 +279,59 @@ export default async function UserProfilePage({ params }: { params: { username: 
                             </div>
 
                             <ActivityHeatmap data={heatmapData} />
+                        </div>
+
+                        {/* Posts & Comments tabs */}
+                        <div className="bg-gray-900 rounded-2xl border border-gray-800 shadow-xl overflow-hidden">
+                            <div className="flex border-b border-gray-800">
+                                <div className="px-5 py-3 text-sm font-semibold text-white border-b-2 border-blue-500">
+                                    Posts
+                                </div>
+                            </div>
+                            <div className="divide-y divide-gray-800">
+                                {profileUser.posts.length === 0 ? (
+                                    <p className="text-center text-gray-500 text-sm py-8">No posts yet.</p>
+                                ) : profileUser.posts.map((p: any) => (
+                                    <Link
+                                        key={p.id}
+                                        href={`/community/post/${p.id}`}
+                                        className="flex items-start gap-4 px-5 py-4 hover:bg-gray-800/50 transition-colors"
+                                    >
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-medium text-sm text-white line-clamp-1">{p.title}</p>
+                                            <p className="text-xs text-gray-400 mt-0.5">
+                                                c/{p.comic?.title ?? '—'} · {new Date(p.createdAt).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-900 rounded-2xl border border-gray-800 shadow-xl overflow-hidden">
+                            <div className="flex border-b border-gray-800">
+                                <div className="px-5 py-3 text-sm font-semibold text-white border-b-2 border-blue-500">
+                                    Comments
+                                </div>
+                            </div>
+                            <div className="divide-y divide-gray-800">
+                                {profileUser.comments.length === 0 ? (
+                                    <p className="text-center text-gray-500 text-sm py-8">No comments yet.</p>
+                                ) : profileUser.comments.map((c: any) => (
+                                    <Link
+                                        key={c.id}
+                                        href={c.post ? `/community/post/${c.post.id}` : '/community'}
+                                        className="flex items-start gap-4 px-5 py-4 hover:bg-gray-800/50 transition-colors"
+                                    >
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm text-gray-200 line-clamp-2 italic">&ldquo;{c.content}&rdquo;</p>
+                                            <p className="text-xs text-gray-400 mt-1">
+                                                {c.post ? `on "${c.post.title}"` : 'chapter comment'} · {new Date(c.createdAt).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                    </Link>
+                                ))}
+                            </div>
                         </div>
 
                         {/* Recent Activity */}

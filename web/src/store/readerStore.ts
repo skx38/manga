@@ -7,7 +7,6 @@ export type FitMode = 'WIDTH' | 'HEIGHT' | 'ORIGINAL';
 export type Theme = 'LIGHT' | 'DARK' | 'BLACK';
 
 interface ReaderState {
-    // Settings
     readingMode: ReadingMode;
     direction: ReadingDirection;
     fitMode: FitMode;
@@ -15,8 +14,9 @@ interface ReaderState {
     showOverlay: boolean;
     doublePage: boolean;
     theme: Theme;
+    einkMode: boolean;
+    danmuEnabled: boolean;
 
-    // Actions
     setReadingMode: (mode: ReadingMode) => void;
     setDirection: (direction: ReadingDirection) => void;
     setFitMode: (mode: FitMode) => void;
@@ -25,18 +25,22 @@ interface ReaderState {
     setShowOverlay: (show: boolean) => void;
     setDoublePage: (double: boolean) => void;
     setTheme: (theme: Theme) => void;
+    setEinkMode: (enabled: boolean) => void;
+    setDanmuEnabled: (enabled: boolean) => void;
 }
 
 export const useReaderStore = create<ReaderState>()(
     persist(
         (set) => ({
-            readingMode: 'STRIP', // Default to Webtoon style
+            readingMode: 'STRIP',
             direction: 'LTR',
             fitMode: 'HEIGHT',
             zoom: 100,
             showOverlay: true,
             doublePage: false,
             theme: 'BLACK',
+            einkMode: false,
+            danmuEnabled: true,
 
             setReadingMode: (mode) => set({ readingMode: mode }),
             setDirection: (direction) => set({ direction }),
@@ -46,6 +50,8 @@ export const useReaderStore = create<ReaderState>()(
             setShowOverlay: (show) => set({ showOverlay: show }),
             setDoublePage: (doublePage) => set({ doublePage }),
             setTheme: (theme) => set({ theme }),
+            setEinkMode: (einkMode) => set({ einkMode }),
+            setDanmuEnabled: (danmuEnabled) => set({ danmuEnabled }),
         }),
         {
             name: 'reader-storage',
@@ -55,8 +61,10 @@ export const useReaderStore = create<ReaderState>()(
                 fitMode: state.fitMode,
                 zoom: state.zoom,
                 doublePage: state.doublePage,
-                theme: state.theme
-            }), // Only persist settings, not UI state like overlay
+                theme: state.theme,
+                einkMode: state.einkMode,
+                danmuEnabled: state.danmuEnabled,
+            }),
         }
     )
 );

@@ -65,7 +65,6 @@ export default function ReviewSection({ comicId, comicTitle, coverImageUrl, comi
                     comicTitle,
                     coverImageUrl,
                     comicType,
-                    userId: 'demo_user_id', // Mock ID
                     recommend,
                     comment
                 }),
@@ -93,7 +92,6 @@ export default function ReviewSection({ comicId, comicTitle, coverImageUrl, comi
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     reviewId,
-                    userId: 'demo_user_id',
                     type
                 }),
             });

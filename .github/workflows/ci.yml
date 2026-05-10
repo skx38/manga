@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, "claude/**", "feat/**", "fix/**"]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    name: Type-check, lint, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: manga_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/manga_test
+      NEXTAUTH_SECRET: ci_secret_not_real
+      NEXTAUTH_URL: http://localhost:3000
+      # No OAuth keys in CI — providers are conditionally registered when env vars present
+      DEV_DEMO_USER_ID: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Push DB schema
+        run: npx prisma db push --skip-generate
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build

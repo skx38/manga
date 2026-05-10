@@ -1,6 +1,7 @@
 import { PrismaClient, Origin, Status, ContentRating } from '@prisma/client';
 import FilterPanel from '@/components/search/FilterPanel';
 import ComicCard from '@/components/ComicCard';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 
 const prisma = new PrismaClient();
 
@@ -96,11 +97,13 @@ export default async function SearchPage({
     ]);
 
     // Fetch library status for current user
-    const userId = 'demo_user_id';
-    const libraryEntries = await prisma.libraryEntry.findMany({
-        where: { userId },
-        select: { comicId: true, status: true }
-    });
+    const userId = await getCurrentUserIdOrDemo();
+    const libraryEntries = userId
+        ? await prisma.libraryEntry.findMany({
+              where: { userId },
+              select: { comicId: true, status: true },
+          })
+        : [];
     const libraryMap = new Map(libraryEntries.map(e => [e.comicId, e.status]));
 
     return (

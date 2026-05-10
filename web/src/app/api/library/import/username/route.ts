@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { processImport, mapExternalStatus, ImportEntry } from '@/lib/import-utils';
 
 export async function POST(req: NextRequest) {
     try {
         const { username, source, mode } = await req.json();
-        const userId = 'demo_user_id';
+        const userId = await getCurrentUserIdOrDemo();
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         if (!username || !source) {
             return NextResponse.json({ error: 'Missing username or source' }, { status: 400 });

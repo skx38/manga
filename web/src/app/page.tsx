@@ -1,13 +1,14 @@
 import ComicCard from '@/components/ComicCard';
 import UpNextCarousel from '@/components/dashboard/UpNextCarousel';
 import { PrismaClient } from '@prisma/client';
-import Link from 'next/link';
 import StatsOverview from '@/components/dashboard/StatsOverview';
 import ReadingHeatmap from '@/components/dashboard/ReadingHeatmap';
 import { startOfDay, subDays, differenceInDays, isSameDay } from 'date-fns';
-import { BookOpen } from 'lucide-react';
+import { Flame, Sparkles, Clock, BarChart3 } from 'lucide-react';
 import HeroCarousel from '@/components/dashboard/HeroCarousel';
 import { getPersonalizedRecommendations } from '@/lib/recommendations';
+import { getCurrentUserIdOrDemo } from '@/lib/session';
+import { SectionHeader } from '@/components/shared/SectionHeader';
 
 const prisma = new PrismaClient();
 
@@ -46,8 +47,8 @@ async function getUpdates() {
   }));
 }
 
-async function getRecommendedComics() {
-  const userId = 'demo_user_id';
+async function getRecommendedComics(userId: string | null) {
+  if (!userId) return [];
   const comics = await getPersonalizedRecommendations(userId, 10);
 
   return comics.map((comic: any) => ({
@@ -60,9 +61,8 @@ async function getRecommendedComics() {
   }));
 }
 
-async function getReadingStats() {
-  const userId = 'demo_user_id';
-
+async function getReadingStats(userId: string | null) {
+  if (!userId) return { stats: null, heatmap: [] };
   try {
     const stats = await (prisma as any).userReadingStat.findMany({
       where: { userId },
@@ -138,17 +138,19 @@ async function getReadingStats() {
 }
 
 export default async function Home() {
+  const userId = await getCurrentUserIdOrDemo();
   const trendingComics = await getTrendingComics();
   const updates = await getUpdates();
-  const recommendedComics = await getRecommendedComics();
-  const { stats, heatmap } = await getReadingStats();
+  const recommendedComics = await getRecommendedComics(userId);
+  const { stats, heatmap } = await getReadingStats(userId);
 
   // Fetch library status for current user
-  const userId = 'demo_user_id';
-  const libraryEntries = await (prisma as any).libraryEntry.findMany({
-    where: { userId },
-    include: { comic: true }
-  });
+  const libraryEntries = userId
+    ? await (prisma as any).libraryEntry.findMany({
+        where: { userId },
+        include: { comic: true },
+      })
+    : [];
 
   // Create a map of slug -> status
   const libraryMap = new Map();
@@ -162,84 +164,55 @@ export default async function Home() {
     return libraryMap.get(comic.id) || null;
   };
 
+  const CARD_GRID = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-4';
+
   return (
-    <main className="min-h-screen bg-[#0a0c10] pb-20">
-      {/* Hero Section with Carousel */}
+    <main className="min-h-screen pb-20">
       <HeroCarousel comics={trendingComics} />
 
-      <div className="container mx-auto px-4 relative z-10">
-        {/* Up Next Carousel - Added top margin for separation */}
-        <div className="mt-8">
+      <div className="container mx-auto px-4 pt-8 space-y-12">
+        {/* Continue reading */}
+        <section>
           <UpNextCarousel />
-        </div>
+        </section>
 
-        {/* Reading Stats */}
-        <div className="mb-12">
-          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-            <span className="text-green-500">📊</span> Reading Activity
-          </h2>
-          <StatsOverview stats={stats} loading={false} />
-          <ReadingHeatmap data={heatmap} loading={false} />
-        </div>
+        {/* Reading Stats (only when signed in / demo user) */}
+        {userId && (stats || heatmap.length > 0) && (
+          <section>
+            <SectionHeader title="Reading Activity" icon={BarChart3} />
+            <StatsOverview stats={stats} loading={false} />
+            <ReadingHeatmap data={heatmap} loading={false} />
+          </section>
+        )}
 
-        {/* Recommended For You Section */}
+        {/* Recommended */}
         {recommendedComics.length > 0 && (
-          <section className="mb-12">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <span className="text-yellow-500">🎯</span> Recommended for You
-              </h2>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+          <section>
+            <SectionHeader title="Recommended for You" icon={Sparkles} />
+            <div className={CARD_GRID}>
               {recommendedComics.map((comic: any) => (
-                <ComicCard
-                  key={comic.id}
-                  {...comic}
-                  currentStatus={mapStatus(comic)}
-                />
+                <ComicCard key={comic.id} {...comic} currentStatus={mapStatus(comic)} />
               ))}
             </div>
           </section>
         )}
 
-        {/* Trending Section */}
-        <section className="mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-              <span className="text-blue-500">📈</span> Trending Now
-            </h2>
-            <Link href="/search?sort=rating" className="text-blue-400 hover:text-blue-300 text-sm font-medium">
-              View All
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+        {/* Trending */}
+        <section>
+          <SectionHeader title="Trending Now" icon={Flame} href="/search?sort=popular" />
+          <div className={CARD_GRID}>
             {trendingComics.map((comic: any) => (
-              <ComicCard
-                key={comic.id}
-                {...comic}
-                currentStatus={mapStatus(comic)}
-              />
+              <ComicCard key={comic.id} {...comic} currentStatus={mapStatus(comic)} />
             ))}
           </div>
         </section>
 
-        {/* Updates Section */}
+        {/* Latest Updates */}
         <section>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-              <span className="text-purple-500">✨</span> Updates
-            </h2>
-            <Link href="/search?sort=latest" className="text-blue-400 hover:text-blue-300 text-sm font-medium">
-              View All
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+          <SectionHeader title="Latest Updates" icon={Clock} href="/search?sort=latest" />
+          <div className={CARD_GRID}>
             {updates.map((comic: any) => (
-              <ComicCard
-                key={comic.id}
-                {...comic}
-                currentStatus={mapStatus(comic)}
-              />
+              <ComicCard key={comic.id} {...comic} currentStatus={mapStatus(comic)} />
             ))}
           </div>
         </section>
