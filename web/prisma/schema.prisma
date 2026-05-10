@@ -63,6 +63,9 @@ model User {
   savedItems        SavedItem[]
   notifications     Notification[]    @relation("NotificationRecipient")
   actorNotifications Notification[]   @relation("NotificationActor")
+  reportsFiled      Report[]          @relation("ReportReporter")
+  reportsResolved   Report[]          @relation("ReportResolver")
+  modOf             ComicMod[]
 }
 
 // --- NextAuth tables ----------------------------------------------------
@@ -156,6 +159,8 @@ model Comic {
   libraryEntries LibraryEntry[]
   posts         Post[]
   communityRules Json?
+  bannedWords   String[]      @default([])
+  mods          ComicMod[]
 }
 
 enum PageMode {
@@ -273,6 +278,7 @@ model Post {
   votes    Vote[]
   savedBy  SavedItem[]
   notifications Notification[]
+  reports  Report[]
 
   @@index([comicId, createdAt])
   @@index([userId])
@@ -318,6 +324,7 @@ model Comment {
   votes     Vote[]
   savedBy   SavedItem[]
   notifications Notification[]
+  reports   Report[]
 
   @@index([postId, parentId])
   @@index([userId])
@@ -462,4 +469,58 @@ model Notification {
   comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt])
+}
+
+enum ModRole {
+  MOD
+  ADMIN
+}
+
+model ComicMod {
+  comicId   String
+  userId    String
+  role      ModRole  @default(MOD)
+  createdAt DateTime @default(now())
+
+  comic Comic @relation(fields: [comicId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([comicId, userId])
+  @@index([userId])
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  NSFW
+  SPOILER
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+model Report {
+  id           String       @id @default(uuid())
+  reporterId   String
+  postId       String?
+  commentId    String?
+  reason       ReportReason
+  details      String?
+  status       ReportStatus @default(OPEN)
+  resolvedById String?
+  createdAt    DateTime     @default(now())
+  resolvedAt   DateTime?
+
+  reporter   User     @relation("ReportReporter", fields: [reporterId], references: [id])
+  resolvedBy User?    @relation("ReportResolver", fields: [resolvedById], references: [id])
+  post       Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment    Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([postId])
+  @@index([commentId])
 }

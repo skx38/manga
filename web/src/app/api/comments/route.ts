@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { rateLimit } from '@/lib/rateLimit';
 import { ensureChapterDiscussion } from '@/lib/chapterDiscussion';
+import { detectBannedWord } from '@/lib/permissions';
 
 /** Extract unique @username mentions from comment content. */
 function parseMentions(content: string): string[] {
@@ -150,15 +151,27 @@ export async function POST(request: Request) {
             resolvedPostId = post.id;
         }
 
-        // Check that the post isn't locked.
+        // Check that the post isn't locked, and grab the comicId for banned-word lookup.
+        let comicId: string | null = null;
         if (resolvedPostId) {
             const post = await prisma.post.findUnique({
                 where: { id: resolvedPostId },
-                select: { isLocked: true },
+                select: { isLocked: true, comicId: true },
             });
             if (post?.isLocked) {
                 return NextResponse.json({ error: 'Post is locked' }, { status: 403 });
             }
+            comicId = post?.comicId ?? null;
+        }
+
+        // Banned-word filter — auto-flag rather than reject.
+        let bannedHit: string | null = null;
+        if (comicId) {
+            const comic = await prisma.comic.findUnique({
+                where: { id: comicId },
+                select: { bannedWords: true },
+            });
+            bannedHit = detectBannedWord(content, comic?.bannedWords ?? []);
         }
 
         const comment = await prisma.comment.create({
@@ -171,6 +184,17 @@ export async function POST(request: Request) {
             },
             include: { user: { select: { id: true, username: true } } },
         });
+
+        if (bannedHit) {
+            await prisma.report.create({
+                data: {
+                    reporterId: userId,
+                    commentId: comment.id,
+                    reason: 'SPAM',
+                    details: `Auto-flag: banned word "${bannedHit}"`,
+                },
+            });
+        }
 
         // Fire-and-forget notifications (don't await so the response is fast).
         void createCommentNotifications({ comment, userId, parentId, resolvedPostId });

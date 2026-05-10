@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, Bookmark, Eye, EyeOff, BookOpen } from 'lucide-react';
+import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, Bookmark, Eye, EyeOff, BookOpen, Flag } from 'lucide-react';
 
 interface PostCardProps {
     post: {
@@ -55,6 +55,26 @@ export default function PostCard({ post, onClick, compact = false, highlighted =
         } catch {
             setSaved(!nextSaved);
         }
+    };
+
+    const handleReport = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const reason = window.prompt('Reason? (SPAM | HARASSMENT | NSFW | SPOILER | OTHER)');
+        if (!reason) return;
+        const upper = reason.trim().toUpperCase();
+        const valid = ['SPAM', 'HARASSMENT', 'NSFW', 'SPOILER', 'OTHER'];
+        if (!valid.includes(upper)) {
+            alert('Invalid reason.');
+            return;
+        }
+        const details = window.prompt('Details (optional):') || undefined;
+        const res = await fetch('/api/reports', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postId: post.id, reason: upper, details }),
+        });
+        if (res.ok) alert('Report filed. Thanks for keeping the community safe.');
+        else alert('Failed to file report.');
     };
 
     const handleVote = async (value: number) => {
@@ -246,6 +266,15 @@ export default function PostCard({ post, onClick, compact = false, highlighted =
                         >
                             <Bookmark size={14} fill={saved ? 'currentColor' : 'none'} />
                             <span>{saved ? 'Saved' : 'Save'}</span>
+                        </button>
+
+                        <button
+                            onClick={handleReport}
+                            aria-label="Report post"
+                            className="flex items-center gap-1.5 hover:bg-destructive/10 hover:text-destructive px-2.5 py-1.5 rounded-md transition-colors min-h-[2.25rem]"
+                        >
+                            <Flag size={14} />
+                            <span>Report</span>
                         </button>
 
                         {post.comic && (

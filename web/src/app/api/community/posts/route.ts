@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { rateLimit } from '@/lib/rateLimit';
+import { isCommunityMod, detectBannedWord } from '@/lib/permissions';
 
 const prisma = new PrismaClient();
 
@@ -197,9 +198,29 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        const post = await prisma.post.create({
-            data: { title, content: content || "", comicId, userId, flair },
+        // Banned-word filter — auto-flag rather than reject so mods can review.
+        const comic = await prisma.comic.findUnique({
+            where: { id: comicId },
+            select: { bannedWords: true },
         });
+        const hit = detectBannedWord(`${title}\n${content || ''}`, comic?.bannedWords ?? []);
+
+        const post = await prisma.post.create({
+            data: {
+                title,
+                content: content || "",
+                comicId,
+                userId,
+                flair,
+                isRemoved: !!hit,
+            },
+        });
+
+        if (hit) {
+            await prisma.report.create({
+                data: { reporterId: userId, postId: post.id, reason: 'SPAM', details: `Auto-flag: banned word "${hit}"` },
+            });
+        }
 
         return NextResponse.json(post, { status: 201 });
     } catch (error) {
@@ -214,17 +235,42 @@ export async function PATCH(request: Request) {
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const body = await request.json();
-        const { id, title, content, flair } = body;
+        const { id, title, content, flair, isLocked, isPinned, isRemoved } = body;
         if (!id) return NextResponse.json({ error: 'Missing post id' }, { status: 400 });
 
-        const post = await prisma.post.findUnique({ where: { id }, select: { userId: true } });
+        const post = await prisma.post.findUnique({
+            where: { id },
+            select: { userId: true, comicId: true },
+        });
         if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
-        if (post.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-        const data: any = { editedAt: new Date() };
-        if (typeof title === 'string' && title.trim()) data.title = title;
-        if (typeof content === 'string') data.content = content;
-        if (typeof flair === 'string' || flair === null) data.flair = flair;
+        const isOwner = post.userId === userId;
+        const isMod = await isCommunityMod(userId, post.comicId);
+
+        const isModAction =
+            typeof isLocked === 'boolean' ||
+            typeof isPinned === 'boolean' ||
+            typeof isRemoved === 'boolean';
+
+        // Author can edit content; mod can flip lifecycle flags.
+        if (!isOwner && !isMod) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        if (isModAction && !isMod) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+        const data: any = {};
+        if (isOwner) {
+            if (typeof title === 'string' && title.trim()) data.title = title;
+            if (typeof content === 'string') data.content = content;
+            if (typeof flair === 'string' || flair === null) data.flair = flair;
+            if (Object.keys(data).length > 0) data.editedAt = new Date();
+        }
+        if (isMod) {
+            if (typeof isLocked === 'boolean') data.isLocked = isLocked;
+            if (typeof isPinned === 'boolean') data.isPinned = isPinned;
+            if (typeof isRemoved === 'boolean') data.isRemoved = isRemoved;
+        }
+        if (Object.keys(data).length === 0) {
+            return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+        }
 
         const updated = await prisma.post.update({ where: { id }, data });
         return NextResponse.json(updated);
