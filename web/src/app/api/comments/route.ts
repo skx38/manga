@@ -4,7 +4,78 @@ import { getCurrentUserIdOrDemo } from '@/lib/session';
 import { rateLimit } from '@/lib/rateLimit';
 import { ensureChapterDiscussion } from '@/lib/chapterDiscussion';
 
+/** Extract unique @username mentions from comment content. */
+function parseMentions(content: string): string[] {
+    const matches = content.match(/@(\w{1,32})/g) ?? [];
+    return [...new Set(matches.map((m) => m.slice(1)))];
+}
+
 const prisma = new PrismaClient();
+
+async function createCommentNotifications({
+    comment,
+    userId,
+    parentId,
+    resolvedPostId,
+}: {
+    comment: { id: string; content: string };
+    userId: string;
+    parentId?: string;
+    resolvedPostId?: string;
+}) {
+    try {
+        const jobs: Promise<any>[] = [];
+
+        // REPLY notification: tell the parent comment author they got a reply.
+        if (parentId) {
+            const parent = await prisma.comment.findUnique({
+                where: { id: parentId },
+                select: { userId: true },
+            });
+            if (parent && parent.userId !== userId) {
+                jobs.push(
+                    prisma.notification.create({
+                        data: {
+                            userId: parent.userId,
+                            type: 'REPLY',
+                            actorId: userId,
+                            commentId: comment.id,
+                            postId: resolvedPostId,
+                        },
+                    })
+                );
+            }
+        }
+
+        // MENTION notifications: parse @username and notify each mentioned user.
+        const mentions = parseMentions(comment.content);
+        if (mentions.length > 0) {
+            const mentionedUsers = await prisma.user.findMany({
+                where: { username: { in: mentions } },
+                select: { id: true },
+            });
+            for (const mu of mentionedUsers) {
+                if (mu.id !== userId) {
+                    jobs.push(
+                        prisma.notification.create({
+                            data: {
+                                userId: mu.id,
+                                type: 'MENTION',
+                                actorId: userId,
+                                commentId: comment.id,
+                                postId: resolvedPostId,
+                            },
+                        })
+                    );
+                }
+            }
+        }
+
+        await Promise.all(jobs);
+    } catch (e) {
+        console.error('Notification creation failed (non-fatal):', e);
+    }
+}
 
 export async function GET(request: Request) {
     try {
@@ -100,6 +171,9 @@ export async function POST(request: Request) {
             },
             include: { user: { select: { id: true, username: true } } },
         });
+
+        // Fire-and-forget notifications (don't await so the response is fast).
+        void createCommentNotifications({ comment, userId, parentId, resolvedPostId });
 
         return NextResponse.json(comment, { status: 201 });
     } catch (error) {

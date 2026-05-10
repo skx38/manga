@@ -1,151 +1,141 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { Bell, Check, MessageSquare, BookOpen, Info } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Bell, MessageSquare, AtSign, Shield } from 'lucide-react';
+import Link from 'next/link';
+import { formatDistanceToNow } from 'date-fns';
 import { usePreferences } from '@/context/PreferencesContext';
 
-interface Notification {
+interface ApiNotification {
     id: string;
-    type: 'reply' | 'chapter' | 'system';
-    title: string;
-    message: string;
-    time: string;
-    read: boolean;
-    link?: string;
+    type: 'REPLY' | 'MENTION' | 'MOD_ACTION';
+    readAt: string | null;
+    createdAt: string;
+    actor?: { id: string; username: string; image?: string };
+    post?: { id: string; title: string };
+    comment?: { id: string; content: string };
 }
 
-const MOCK_NOTIFICATIONS: Notification[] = [
-    {
-        id: '1',
-        type: 'chapter',
-        title: 'New Chapter Available',
-        message: 'Solo Leveling Chapter 180 has been released!',
-        time: '2m ago',
-        read: false,
-        link: '/comic/solo-leveling'
-    },
-    {
-        id: '2',
-        type: 'reply',
-        title: 'New Reply',
-        message: 'User123 replied to your comment on "One Piece Theory"',
-        time: '1h ago',
-        read: false,
-        link: '/community/post/123'
-    },
-    {
-        id: '3',
-        type: 'system',
-        title: 'Welcome to OmniRead!',
-        message: 'Thanks for joining our beta. Explore and enjoy!',
-        time: '1d ago',
-        read: true
+function typeIcon(type: ApiNotification['type']) {
+    switch (type) {
+        case 'REPLY': return <MessageSquare size={15} className="text-brand" />;
+        case 'MENTION': return <AtSign size={15} className="text-success" />;
+        case 'MOD_ACTION': return <Shield size={15} className="text-warning" />;
     }
-];
+}
+
+function notificationLink(n: ApiNotification) {
+    if (n.post && n.comment) return `/community/post/${n.post.id}/comment/${n.comment.id}`;
+    if (n.post) return `/community/post/${n.post.id}`;
+    return '/community';
+}
+
+function notificationText(n: ApiNotification) {
+    const actor = n.actor?.username ?? 'Someone';
+    switch (n.type) {
+        case 'REPLY': return `${actor} replied to your comment`;
+        case 'MENTION': return `${actor} mentioned you in a comment`;
+        case 'MOD_ACTION': return 'A moderator took action on your content';
+    }
+}
 
 export default function NotificationDropdown() {
     const [isOpen, setIsOpen] = useState(false);
-    const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
+    const [notifications, setNotifications] = useState<ApiNotification[]>([]);
+    const [unreadCount, setUnreadCount] = useState(0);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const { focusMode } = usePreferences();
 
-    const unreadCount = notifications.filter(n => !n.read).length;
+    const fetchNotifications = useCallback(async () => {
+        try {
+            const res = await fetch('/api/notifications?limit=20');
+            if (res.ok) {
+                const data = await res.json();
+                setNotifications(data.notifications);
+                setUnreadCount(data.unreadCount);
+            }
+        } catch { /* non-fatal */ }
+    }, []);
 
-    // Close on click outside
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        fetchNotifications();
+        const interval = setInterval(fetchNotifications, 60_000); // poll every minute
+        return () => clearInterval(interval);
+    }, [fetchNotifications]);
+
+    // Close on outside click.
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
                 setIsOpen(false);
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
     }, []);
 
-    const markAsRead = (id: string) => {
-        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    };
-
-    const markAllAsRead = () => {
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    };
-
-    const getIcon = (type: string) => {
-        switch (type) {
-            case 'chapter': return <BookOpen size={16} className="text-blue-400" />;
-            case 'reply': return <MessageSquare size={16} className="text-green-400" />;
-            default: return <Info size={16} className="text-gray-400" />;
+    const handleOpen = () => {
+        setIsOpen((v) => !v);
+        // Mark all read when opening.
+        if (!isOpen && unreadCount > 0) {
+            setUnreadCount(0);
+            setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
+            fetch('/api/notifications', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         }
     };
 
     return (
         <div className="relative" ref={dropdownRef}>
             <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="relative p-2 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white transition-colors focus:outline-none"
+                onClick={handleOpen}
+                aria-label="Notifications"
+                className="relative p-2 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
             >
                 <Bell size={20} />
                 {unreadCount > 0 && !focusMode && (
-                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-gray-950 animate-pulse" />
+                    <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground border-2 border-background">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
                 )}
             </button>
 
             {isOpen && (
-                <div className="absolute top-full right-0 mt-2 w-80 bg-gray-900 rounded-xl border border-gray-800 shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="flex items-center justify-between p-3 border-b border-gray-800 bg-gray-900/50">
-                        <h3 className="font-bold text-white text-sm">Notifications</h3>
-                        {unreadCount > 0 && (
-                            <button
-                                onClick={markAllAsRead}
-                                className="text-[10px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-wider"
-                            >
-                                Mark all read
-                            </button>
-                        )}
+                <div className="absolute top-full right-0 mt-2 w-80 bg-popover border border-border rounded-xl shadow-2xl overflow-hidden z-50">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                        <h3 className="font-semibold text-sm">Notifications</h3>
                     </div>
 
-                    <div className="max-h-80 overflow-y-auto">
+                    <div className="max-h-80 overflow-y-auto divide-y divide-border">
                         {notifications.length === 0 ? (
-                            <div className="p-8 text-center text-gray-500 text-sm">
-                                No notifications
-                            </div>
+                            <p className="p-8 text-center text-muted-foreground text-sm">No notifications yet.</p>
                         ) : (
-                            notifications.map(notification => (
-                                <div
-                                    key={notification.id}
-                                    className={`p-3 border-b border-gray-800 hover:bg-gray-800/50 transition-colors cursor-pointer group ${notification.read ? 'opacity-60' : 'bg-gray-800/20'}`}
-                                    onClick={() => markAsRead(notification.id)}
+                            notifications.map((n) => (
+                                <Link
+                                    key={n.id}
+                                    href={notificationLink(n)}
+                                    onClick={() => setIsOpen(false)}
+                                    className={`flex gap-3 px-4 py-3 hover:bg-accent transition-colors ${!n.readAt ? 'bg-brand/5' : ''}`}
                                 >
-                                    <div className="flex gap-3">
-                                        <div className={`mt-1 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${notification.read ? 'bg-gray-800' : 'bg-gray-700'}`}>
-                                            {getIcon(notification.type)}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-start mb-0.5">
-                                                <h4 className={`text-sm font-medium truncate ${notification.read ? 'text-gray-400' : 'text-white'}`}>
-                                                    {notification.title}
-                                                </h4>
-                                                <span className="text-[10px] text-gray-500 whitespace-nowrap ml-2">
-                                                    {notification.time}
-                                                </span>
-                                            </div>
-                                            <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
-                                                {notification.message}
-                                            </p>
-                                        </div>
-                                        {!notification.read && (
-                                            <div className="mt-2 w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />
-                                        )}
+                                    <div className="mt-0.5 w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                                        {typeIcon(n.type)}
                                     </div>
-                                </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className={`text-sm leading-snug ${!n.readAt ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                                            {notificationText(n)}
+                                        </p>
+                                        {n.post && (
+                                            <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                                in &ldquo;{n.post.title}&rdquo;
+                                            </p>
+                                        )}
+                                        <p className="text-[11px] text-muted-foreground/70 mt-1">
+                                            {formatDistanceToNow(new Date(n.createdAt))} ago
+                                        </p>
+                                    </div>
+                                    {!n.readAt && <div className="mt-2 w-2 h-2 rounded-full bg-brand flex-shrink-0" />}
+                                </Link>
                             ))
                         )}
-                    </div>
-
-                    <div className="p-2 bg-gray-900/50 border-t border-gray-800 text-center">
-                        <button className="text-xs text-gray-500 hover:text-white transition-colors">
-                            View all history
-                        </button>
                     </div>
                 </div>
             )}

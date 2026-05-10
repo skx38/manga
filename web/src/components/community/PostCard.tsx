@@ -40,6 +40,22 @@ export default function PostCard({ post, onClick, compact = false, highlighted =
     const [score, setScore] = useState(post.score || 0);
     const [userVote, setUserVote] = useState(post.userVote || 0);
     const [revealed, setRevealed] = useState(false);
+    const [saved, setSaved] = useState(false);
+
+    const handleSave = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const nextSaved = !saved;
+        setSaved(nextSaved);
+        try {
+            await fetch('/api/saved', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ postId: post.id }),
+            });
+        } catch {
+            setSaved(!nextSaved);
+        }
+    };
 
     const handleVote = async (value: number) => {
         const previousScore = score;
@@ -220,9 +236,16 @@ export default function PostCard({ post, onClick, compact = false, highlighted =
                             <span>Share</span>
                         </button>
 
-                        <button className="flex items-center gap-1.5 hover:bg-accent hover:text-accent-foreground px-2.5 py-1.5 rounded-md transition-colors min-h-[2.25rem]">
-                            <Bookmark size={14} />
-                            <span>Save</span>
+                        <button
+                            onClick={handleSave}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-colors min-h-[2.25rem] ${
+                                saved
+                                    ? 'text-brand bg-brand/10 hover:bg-brand/20'
+                                    : 'hover:bg-accent hover:text-accent-foreground'
+                            }`}
+                        >
+                            <Bookmark size={14} fill={saved ? 'currentColor' : 'none'} />
+                            <span>{saved ? 'Saved' : 'Save'}</span>
                         </button>
 
                         {post.comic && (

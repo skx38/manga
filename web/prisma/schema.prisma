@@ -34,6 +34,10 @@ model User {
   freezeTokens         Int       @default(0)
   lastReadDate         DateTime?
 
+  // Karma (recomputed nightly by /api/cron/recompute-karma)
+  postKarma            Int       @default(0)
+  commentKarma         Int       @default(0)
+
   // Settings
   preferences          Json?     // Global app preferences
   privacySettings      Json?
@@ -46,16 +50,19 @@ model User {
   accounts  Account[]
   sessions  Session[]
 
-  readingProgress ReadingProgress[]
-  comments        Comment[]
-  posts           Post[]
-  votes           Vote[]
-  subscriptions   Subscription[]
-  folders         Folder[]
-  reviews         Review[]
-  readingStats    UserReadingStat[]
-  libraryEntries  LibraryEntry[]
-  reviewReactions ReviewReaction[]
+  readingProgress   ReadingProgress[]
+  comments          Comment[]
+  posts             Post[]
+  votes             Vote[]
+  subscriptions     Subscription[]
+  folders           Folder[]
+  reviews           Review[]
+  readingStats      UserReadingStat[]
+  libraryEntries    LibraryEntry[]
+  reviewReactions   ReviewReaction[]
+  savedItems        SavedItem[]
+  notifications     Notification[]    @relation("NotificationRecipient")
+  actorNotifications Notification[]   @relation("NotificationActor")
 }
 
 // --- NextAuth tables ----------------------------------------------------
@@ -259,11 +266,13 @@ model Post {
   isPinned  Boolean  @default(false)  // pinned to top of comic feed
   isRemoved Boolean  @default(false)  // mod-removed, hidden from feed
 
-  comic    Comic     @relation(fields: [comicId], references: [id], onDelete: Cascade)
-  user     User      @relation(fields: [userId], references: [id])
-  chapter  Chapter?  @relation(fields: [chapterId], references: [id])
+  comic    Comic         @relation(fields: [comicId], references: [id], onDelete: Cascade)
+  user     User          @relation(fields: [userId], references: [id])
+  chapter  Chapter?      @relation(fields: [chapterId], references: [id])
   comments Comment[]
   votes    Vote[]
+  savedBy  SavedItem[]
+  notifications Notification[]
 
   @@index([comicId, createdAt])
   @@index([userId])
@@ -301,12 +310,14 @@ model Comment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id])
-  chapter  Chapter?  @relation(fields: [chapterId], references: [id])
-  post     Post?     @relation(fields: [postId], references: [id])
-  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
-  replies  Comment[] @relation("CommentReplies")
-  votes    Vote[]
+  user      User           @relation(fields: [userId], references: [id])
+  chapter   Chapter?       @relation(fields: [chapterId], references: [id])
+  post      Post?          @relation(fields: [postId], references: [id])
+  parent    Comment?       @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[]      @relation("CommentReplies")
+  votes     Vote[]
+  savedBy   SavedItem[]
+  notifications Notification[]
 
   @@index([postId, parentId])
   @@index([userId])
@@ -409,6 +420,46 @@ model LibraryEntry {
   
   user  User  @relation(fields: [userId], references: [id])
   comic Comic @relation(fields: [comicId], references: [id], onDelete: Cascade)
-  
+
   @@id([userId, comicId])
+}
+
+model SavedItem {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String?
+  commentId String?
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post    Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
+  @@index([userId])
+}
+
+enum NotificationType {
+  REPLY
+  MENTION
+  MOD_ACTION
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String           // recipient
+  type        NotificationType
+  actorId     String?          // who triggered it
+  postId      String?
+  commentId   String?
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  user    User     @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor   User?    @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  post    Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
 }
