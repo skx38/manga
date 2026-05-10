@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Upload, Download, FileJson, AlertTriangle, Check, Loader2, User } from 'lucide-react';
 
-type ImportSource = 'mal' | 'anilist' | 'tachiyomi' | 'comick';
+type ImportSource = 'mal' | 'anilist' | 'tachiyomi' | 'mihon' | 'comick';
 type ImportMode = 'merge' | 'replace';
 type ImportMethod = 'file' | 'username';
 
@@ -134,12 +134,19 @@ export default function ImportExportSettings() {
                         >
                             <option value="mal">MyAnimeList (MAL)</option>
                             <option value="anilist">Anilist</option>
-                            {method === 'file' && <option value="tachiyomi">Tachiyomi (Backup)</option>}
+                            {method === 'file' && <option value="tachiyomi">Tachiyomi (JSON backup)</option>}
+                            {method === 'file' && <option value="mihon">Mihon / Tachiyomi (protobuf .proto.gz)</option>}
                             {method === 'file' && <option value="comick">Comick</option>}
                         </select>
                         <p className="mt-1 text-xs text-gray-500">
                             {method === 'file'
-                                ? source === 'mal' ? 'Upload your XML export file.' : source === 'tachiyomi' ? 'Upload your JSON backup file.' : 'Upload your JSON export file.'
+                                ? source === 'mal'
+                                    ? 'Upload your XML export from MyAnimeList.'
+                                    : source === 'tachiyomi'
+                                    ? 'Upload your JSON backup from Tachiyomi (legacy format).'
+                                    : source === 'mihon'
+                                    ? 'Upload your .proto.gz backup from Mihon or modern Tachiyomi. Preserves read progress and category-based status.'
+                                    : 'Upload your JSON export file.'
                                 : 'Enter your public username.'
                             }
                         </p>
@@ -151,7 +158,7 @@ export default function ImportExportSettings() {
                             <label className="block text-sm font-medium text-gray-400 mb-2">File</label>
                             <input
                                 type="file"
-                                accept=".json,.xml,.proto"
+                                accept=".json,.xml,.proto,.proto.gz,.gz"
                                 onChange={handleFileChange}
                                 className="block w-full text-sm text-gray-400
                                     file:mr-4 file:py-2 file:px-4
